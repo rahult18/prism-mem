@@ -12,7 +12,7 @@ Quick reference for coding agents. Read this before touching any file.
 | `prism_mem/config.py` | done | paths, model names, constants |
 | `prism_mem/cli.py` | stub | all commands print "not implemented yet" |
 | `prism_mem/ingestion/session_reader.py` | **done** | fully implemented, tested on real data |
-| `prism_mem/ingestion/git_reader.py` | stub | raises NotImplementedError |
+| `prism_mem/ingestion/git_reader.py` | **done** | `read_git_diff`, `read_git_log` |
 | `prism_mem/extraction/extractor.py` | stub | raises NotImplementedError |
 | `prism_mem/storage/models.py` | **done** | `Triple` and `Edge` dataclasses |
 | `prism_mem/storage/db.py` | stub | raises NotImplementedError |
@@ -119,9 +119,23 @@ DYLD_LIBRARY_PATH=/opt/homebrew/opt/expat/lib .venv/bin/python prism_mem/ingesti
 
 ---
 
-## What's next (Phase 3)
+## git_reader.py — public API
 
-Implement `prism_mem/ingestion/git_reader.py`:
-- `read_git_diff(project_path: str) -> str` — runs `git diff HEAD~1 HEAD`
-- `read_git_log(project_path: str, n: int = 20) -> str` — runs `git log --oneline -N`
-- Both use `subprocess.run`, cwd=project_path, handle edge cases gracefully (no commits, not a git repo)
+```python
+from prism_mem.ingestion.git_reader import read_git_diff, read_git_log
+
+read_git_diff(project_path: str) -> str   # git diff HEAD~1 HEAD, "" on any error/edge case
+read_git_log(project_path: str, n: int = 20) -> str  # git log --oneline -N
+```
+
+Both return `""` safely for: not a git repo, no commits, single commit (no HEAD~1).
+
+---
+
+## What's next (Phase 4 — critical gate)
+
+Implement `prism_mem/extraction/extractor.py` using kg-gen:
+- Chunk the combined text (session chunks + git diff + log)
+- Call kg-gen on each chunk with the Anthropic backend
+- Collect the NetworkX graph of `(subject, predicate, object)` triples
+- **Do not proceed to Phase 5 until triple quality is validated on real sessions**

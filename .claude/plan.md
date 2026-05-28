@@ -43,7 +43,7 @@ Each phase has a clear completion test. Do not move to the next phase until the 
 
 ---
 
-## Phase 3 — Git Reader
+## Phase 3 — Git Reader ✅ DONE
 
 **Goal:** Given a project path, return the last commit's diff and recent commit history as text.
 

@@ -182,7 +182,7 @@ If a feature request does not directly serve "read session → extract triples �
 
 ## Current State
 
-**Phases complete: 1, 2. Next: Phase 3 (git reader).**
+**Phases complete: 1, 2, 3. Next: Phase 4 (kg-gen extraction — critical validation gate).**
 
 ### Phase 1 — Done
 - `pyproject.toml` created with all deps and `prism` entry point
@@ -201,8 +201,13 @@ If a feature request does not directly serve "read session → extract triples �
 - Filters: user text, assistant text, assistant thinking, summary events — skips tool_use/tool_result/system noise
 - Verified on real sessions: 36 chunks from latest prism-mem session including subagent
 
+### Phase 3 — Done
+- `prism_mem/ingestion/git_reader.py` fully implemented
+- Functions: `read_git_diff(project_path) -> str`, `read_git_log(project_path, n=20) -> str`
+- Uses `subprocess.run` with `cwd=project_path`; returns `""` gracefully for non-git dirs, no commits, single commit
+- Verified on prism-mem repo and edge cases
+
 ### Not yet started
-- Phase 3: `prism_mem/ingestion/git_reader.py`
 - Phase 4: `prism_mem/extraction/extractor.py` (kg-gen)
 - Phase 5: `prism_mem/storage/db.py`
 - Phase 6: `prism_mem/linking/linker.py`

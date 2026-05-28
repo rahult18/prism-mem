@@ -4,7 +4,7 @@ Each phase has a clear completion test. Do not move to the next phase until the 
 
 ---
 
-## Phase 1 — Project Setup
+## Phase 1 — Project Setup ✅ DONE
 
 **Goal:** A proper Python package that can be installed and run as a CLI.
 
@@ -23,7 +23,7 @@ Each phase has a clear completion test. Do not move to the next phase until the 
 
 ---
 
-## Phase 2 — Session Reader
+## Phase 2 — Session Reader ✅ DONE
 
 **Goal:** Given a project path, find and parse the most recent Claude Code session into clean text chunks.
 

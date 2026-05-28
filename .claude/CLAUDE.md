@@ -182,8 +182,32 @@ If a feature request does not directly serve "read session → extract triples �
 
 ## Current State
 
-- `.venv` set up with Python 3.13
-- `ingestion/session_reader.py` stub exists (finds `~/.claude` directory, not yet in package)
-- `requirements.txt` empty — add deps here as you go
-- No `pyproject.toml` yet
-- No other modules yet
+**Phases complete: 1, 2. Next: Phase 3 (git reader).**
+
+### Phase 1 — Done
+- `pyproject.toml` created with all deps and `prism` entry point
+- `prism_mem/` package with full directory skeleton (all subdirs + `__init__.py` stubs)
+- `prism_mem/config.py` — paths, constants, model names
+- `prism_mem/cli.py` — stub Click commands: `crystallize`, `serve`, `ui`, `hook install/uninstall`
+- `prism_mem/storage/models.py` — `Triple` and `Edge` dataclasses
+- All other module stubs created (raise `NotImplementedError`)
+- `pip install -e .` works; `prism --help` shows all commands
+
+### Phase 2 — Done
+- `prism_mem/ingestion/session_reader.py` fully implemented
+- Functions: `encode_project_path`, `find_project_sessions`, `list_sessions`, `parse_jsonl`, `parse_session`, `read_latest_session`, `read_session_by_id`
+- Output chunk schema: `{role, content_type, content, timestamp, session_id, source}`
+- Includes subagent transcripts (`<uuid>/subagents/*.jsonl`) tagged with `source=<agent-id>`
+- Filters: user text, assistant text, assistant thinking, summary events — skips tool_use/tool_result/system noise
+- Verified on real sessions: 36 chunks from latest prism-mem session including subagent
+
+### Not yet started
+- Phase 3: `prism_mem/ingestion/git_reader.py`
+- Phase 4: `prism_mem/extraction/extractor.py` (kg-gen)
+- Phase 5: `prism_mem/storage/db.py`
+- Phase 6: `prism_mem/linking/linker.py`
+- Phase 7: `prism_mem/constitution/generator.py`
+- Phase 8: CLI wire-up
+- Phase 9: Git hook
+- Phase 10: MCP server
+- Phase 11: Graph UI

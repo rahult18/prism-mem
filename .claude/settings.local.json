@@ -15,7 +15,8 @@
       "mcp__plugin_claude-mem_mcp-search__get_observations",
       "Bash(curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py)",
       "Bash(DYLD_LIBRARY_PATH=/opt/homebrew/opt/expat/lib /Users/rahul/Desktop/Projects/prism-mem/.venv/bin/python /tmp/get-pip.py)",
-      "Bash(DYLD_LIBRARY_PATH=/opt/homebrew/opt/expat/lib .venv/bin/pip install *)"
+      "Bash(DYLD_LIBRARY_PATH=/opt/homebrew/opt/expat/lib .venv/bin/pip install *)",
+      "Bash(sort -k6 -r)"
     ]
   }
 }

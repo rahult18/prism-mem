@@ -1,0 +1,9 @@
+anthropic>=0.40.0
+click>=8.1.0
+fastapi>=0.115.0
+fastmcp>=2.0.0
+kg-gen>=0.3.0
+networkx>=3.4.0
+pyvis>=0.3.2
+sqlite-vec>=0.1.6
+uvicorn>=0.32.0

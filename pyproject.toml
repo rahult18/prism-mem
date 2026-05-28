@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "prism-mem"
+version = "0.1.0"
+description = "Post-session knowledge crystallizer for AI coding agents"
+requires-python = ">=3.13"
+dependencies = [
+    "anthropic>=0.40.0",
+    "click>=8.1.0",
+    "fastapi>=0.115.0",
+    "fastmcp>=2.0.0",
+    "kg-gen>=0.3.0",
+    "networkx>=3.4.0",
+    "pyvis>=0.3.2",
+    "sqlite-vec>=0.1.6",
+    "uvicorn>=0.32.0",
+]
+
+[project.scripts]
+prism = "prism_mem.cli:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["prism_mem"]

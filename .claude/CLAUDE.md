@@ -182,7 +182,7 @@ If a feature request does not directly serve "read session → extract triples �
 
 ## Current State
 
-**Phases complete: 1, 2, 3, 4, 5. Next: Phase 6 (linking + staleness).**
+**Phases complete: 1–6. Next: Phase 7 (constitution generator).**
 
 ### Done (summary)
 - **Phase 1**: Package skeleton, `pyproject.toml`, CLI stubs, `config.py`, `models.py`
@@ -190,11 +190,10 @@ If a feature request does not directly serve "read session → extract triples �
 - **Phase 3**: `git_reader.py` — `read_git_diff`, `read_git_log`, graceful on all edge cases
 - **Phase 4**: `extractor.py` — kg-gen + Haiku via LiteLLM, `extract_triples(text, context) -> list[tuple]`, `cluster=True`. Validated: 161 triples, good quality.
 - **Phase 5**: `db.py` — SQLite + sqlite-vec, `open_db`, `store_triple`, `get_all_triples`, `get_triple_by_id`, `mark_stale`. Embeddings via `sentence-transformers/all-MiniLM-L6-v2` (384-dim, local/free). DB at `~/.prism/projects/<hash>/graph.db`.
+- **Phase 6**: `linker.py` — `ingest_triple` (store → link → stale), `find_similar` (KNN via sqlite-vec, cosine sim from L2), `create_edge`, `check_and_mark_stale`. Order: link first while old triples are still non-stale, then mark stale. Verified: edge at 0.907 cosine, staleness on exact subject+predicate conflict.
 
 ### Not yet started
-- Phase 6: `prism_mem/linking/linker.py` ← next
-- Phase 6: `prism_mem/linking/linker.py`
-- Phase 7: `prism_mem/constitution/generator.py`
+- Phase 7: `prism_mem/constitution/generator.py` ← next
 - Phase 8: CLI wire-up
 - Phase 9: Git hook
 - Phase 10: MCP server

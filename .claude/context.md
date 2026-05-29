@@ -16,7 +16,7 @@ Quick reference for coding agents. Read this before touching any file.
 | `prism_mem/extraction/extractor.py` | **done** | `extract_triples(text, context) -> list[tuple]` |
 | `prism_mem/storage/models.py` | **done** | `Triple` and `Edge` dataclasses |
 | `prism_mem/storage/db.py` | **done** | `open_db`, `store_triple`, `get_all_triples`, `get_triple_by_id`, `mark_stale` |
-| `prism_mem/linking/linker.py` | stub | raises NotImplementedError |
+| `prism_mem/linking/linker.py` | **done** | `ingest_triple`, `find_similar`, `create_edge`, `check_and_mark_stale`, `link_triple` |
 | `prism_mem/constitution/generator.py` | stub | raises NotImplementedError |
 | `prism_mem/server/mcp_server.py` | stub | raises NotImplementedError |
 | `prism_mem/server/ui_server.py` | stub | raises NotImplementedError |

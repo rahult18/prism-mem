@@ -104,7 +104,7 @@ Each phase has a clear completion test. Do not move to the next phase until the 
 
 ---
 
-## Phase 6 — Linking
+## Phase 6 — Linking ✅ DONE
 
 **Goal:** When a new triple is stored, find related existing triples and connect them. Detect stale facts.
 

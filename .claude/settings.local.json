@@ -20,7 +20,8 @@
       "Bash(DYLD_LIBRARY_PATH=/opt/homebrew/opt/expat/lib .venv/bin/python *)",
       "Bash(grep -v \"^$\\\\|LiteLLM\\\\|WARNING\\\\|INFO\")",
       "Bash(grep -v \"^$\")",
-      "Bash(sqlite3 *)"
+      "Bash(sqlite3 *)",
+      "Skill(claude-mem:make-plan)"
     ]
   }
 }

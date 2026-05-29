@@ -121,7 +121,7 @@ Each phase has a clear completion test. Do not move to the next phase until the 
 
 ---
 
-## Phase 7 — Constitution Generator
+## Phase 7 — Constitution Generator ✅ DONE
 
 **Goal:** Read the knowledge graph and produce a CLAUDE.md that accurately describes the project.
 

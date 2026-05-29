@@ -60,7 +60,7 @@ Each phase has a clear completion test. Do not move to the next phase until the 
 
 ---
 
-## Phase 4 — Extraction (Critical Validation Gate)
+## Phase 4 — Extraction (Critical Validation Gate) ✅ DONE
 
 **Goal:** Feed real session text to kg-gen and evaluate the quality of the triples it returns.
 
@@ -85,7 +85,7 @@ Each phase has a clear completion test. Do not move to the next phase until the 
 
 ---
 
-## Phase 5 — Storage
+## Phase 5 — Storage ✅ DONE
 
 **Goal:** Persist triples and their embeddings in a local SQLite database with vector search.
 

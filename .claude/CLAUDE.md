@@ -182,34 +182,17 @@ If a feature request does not directly serve "read session → extract triples �
 
 ## Current State
 
-**Phases complete: 1, 2, 3. Next: Phase 4 (kg-gen extraction — critical validation gate).**
+**Phases complete: 1, 2, 3, 4, 5. Next: Phase 6 (linking + staleness).**
 
-### Phase 1 — Done
-- `pyproject.toml` created with all deps and `prism` entry point
-- `prism_mem/` package with full directory skeleton (all subdirs + `__init__.py` stubs)
-- `prism_mem/config.py` — paths, constants, model names
-- `prism_mem/cli.py` — stub Click commands: `crystallize`, `serve`, `ui`, `hook install/uninstall`
-- `prism_mem/storage/models.py` — `Triple` and `Edge` dataclasses
-- All other module stubs created (raise `NotImplementedError`)
-- `pip install -e .` works; `prism --help` shows all commands
-
-### Phase 2 — Done
-- `prism_mem/ingestion/session_reader.py` fully implemented
-- Functions: `encode_project_path`, `find_project_sessions`, `list_sessions`, `parse_jsonl`, `parse_session`, `read_latest_session`, `read_session_by_id`
-- Output chunk schema: `{role, content_type, content, timestamp, session_id, source}`
-- Includes subagent transcripts (`<uuid>/subagents/*.jsonl`) tagged with `source=<agent-id>`
-- Filters: user text, assistant text, assistant thinking, summary events — skips tool_use/tool_result/system noise
-- Verified on real sessions: 36 chunks from latest prism-mem session including subagent
-
-### Phase 3 — Done
-- `prism_mem/ingestion/git_reader.py` fully implemented
-- Functions: `read_git_diff(project_path) -> str`, `read_git_log(project_path, n=20) -> str`
-- Uses `subprocess.run` with `cwd=project_path`; returns `""` gracefully for non-git dirs, no commits, single commit
-- Verified on prism-mem repo and edge cases
+### Done (summary)
+- **Phase 1**: Package skeleton, `pyproject.toml`, CLI stubs, `config.py`, `models.py`
+- **Phase 2**: `session_reader.py` — parses JSONL transcripts + subagents, chunk schema: `{role, content_type, content, timestamp, session_id, source}`
+- **Phase 3**: `git_reader.py` — `read_git_diff`, `read_git_log`, graceful on all edge cases
+- **Phase 4**: `extractor.py` — kg-gen + Haiku via LiteLLM, `extract_triples(text, context) -> list[tuple]`, `cluster=True`. Validated: 161 triples, good quality.
+- **Phase 5**: `db.py` — SQLite + sqlite-vec, `open_db`, `store_triple`, `get_all_triples`, `get_triple_by_id`, `mark_stale`. Embeddings via `sentence-transformers/all-MiniLM-L6-v2` (384-dim, local/free). DB at `~/.prism/projects/<hash>/graph.db`.
 
 ### Not yet started
-- Phase 4: `prism_mem/extraction/extractor.py` (kg-gen)
-- Phase 5: `prism_mem/storage/db.py`
+- Phase 6: `prism_mem/linking/linker.py` ← next
 - Phase 6: `prism_mem/linking/linker.py`
 - Phase 7: `prism_mem/constitution/generator.py`
 - Phase 8: CLI wire-up

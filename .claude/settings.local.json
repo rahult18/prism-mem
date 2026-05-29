@@ -18,7 +18,9 @@
       "Bash(DYLD_LIBRARY_PATH=/opt/homebrew/opt/expat/lib .venv/bin/pip install *)",
       "Bash(sort -k6 -r)",
       "Bash(DYLD_LIBRARY_PATH=/opt/homebrew/opt/expat/lib .venv/bin/python *)",
-      "Bash(grep -v \"^$\\\\|LiteLLM\\\\|WARNING\\\\|INFO\")"
+      "Bash(grep -v \"^$\\\\|LiteLLM\\\\|WARNING\\\\|INFO\")",
+      "Bash(grep -v \"^$\")",
+      "Bash(sqlite3 *)"
     ]
   }
 }

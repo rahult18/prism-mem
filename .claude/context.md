@@ -13,9 +13,9 @@ Quick reference for coding agents. Read this before touching any file.
 | `prism_mem/cli.py` | stub | all commands print "not implemented yet" |
 | `prism_mem/ingestion/session_reader.py` | **done** | fully implemented, tested on real data |
 | `prism_mem/ingestion/git_reader.py` | **done** | `read_git_diff`, `read_git_log` |
-| `prism_mem/extraction/extractor.py` | stub | raises NotImplementedError |
+| `prism_mem/extraction/extractor.py` | **done** | `extract_triples(text, context) -> list[tuple]` |
 | `prism_mem/storage/models.py` | **done** | `Triple` and `Edge` dataclasses |
-| `prism_mem/storage/db.py` | stub | raises NotImplementedError |
+| `prism_mem/storage/db.py` | **done** | `open_db`, `store_triple`, `get_all_triples`, `get_triple_by_id`, `mark_stale` |
 | `prism_mem/linking/linker.py` | stub | raises NotImplementedError |
 | `prism_mem/constitution/generator.py` | stub | raises NotImplementedError |
 | `prism_mem/server/mcp_server.py` | stub | raises NotImplementedError |

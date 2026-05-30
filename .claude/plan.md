@@ -196,7 +196,7 @@ This is the payoff moment. If the generated constitution is good, everything is 
 
 ---
 
-## Phase 11 — Graph UI
+## Phase 11 — Graph UI ✅ DONE
 
 **Goal:** `prism ui` opens a local browser UI where the user can explore the knowledge graph.
 

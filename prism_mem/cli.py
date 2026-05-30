@@ -114,9 +114,20 @@ def serve(project):
 
 
 @cli.command()
-def ui():
+@click.option("--project", default=".", show_default=True, help="Path to the project root.")
+@click.option("--host", default="127.0.0.1", show_default=True)
+@click.option("--port", default=7823, show_default=True)
+@click.option("--no-browser", is_flag=True, default=False, help="Don't open the browser automatically.")
+def ui(project, host, port, no_browser):
     """Start the graph UI at http://localhost:7823."""
-    click.echo("not implemented yet")
+    import webbrowser
+    from prism_mem.server.ui_server import start_ui_server
+
+    url = f"http://{host}:{port}"
+    click.echo(f"Starting Prism UI at {url}")
+    if not no_browser:
+        webbrowser.open(url)
+    start_ui_server(project, host=host, port=port)
 
 
 @cli.group()

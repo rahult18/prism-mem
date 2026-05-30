@@ -21,7 +21,11 @@
       "Bash(grep -v \"^$\\\\|LiteLLM\\\\|WARNING\\\\|INFO\")",
       "Bash(grep -v \"^$\")",
       "Bash(sqlite3 *)",
-      "Skill(claude-mem:make-plan)"
+      "Skill(claude-mem:make-plan)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:7823/graph)",
+      "Bash(curl -s http://127.0.0.1:7823/graph)",
+      "Bash(curl -s http://127.0.0.1:7823/memory)",
+      "Bash(kill %1)"
     ]
   }
 }

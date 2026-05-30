@@ -182,7 +182,7 @@ If a feature request does not directly serve "read session → extract triples �
 
 ## Current State
 
-**Phases complete: 1–10. Next: Phase 11 (Graph UI).**
+**Phases complete: 1–11. All phases done. Next: Shipping.**
 
 ### Done (summary)
 - **Phase 1**: Package skeleton, `pyproject.toml`, CLI stubs, `config.py`, `models.py`
@@ -195,6 +195,4 @@ If a feature request does not directly serve "read session → extract triples �
 - **Phase 8**: `cli.py` — `prism crystallize` wires all phases end-to-end. Progress output at each step, graceful errors, `--session` flag. Verified: 385 triples, 3 files written. Note: pipeline takes ~10min (kg-gen API calls are the bottleneck).
 - **Phase 9**: `cli.py` hook group — `prism hook install` writes `.git/hooks/post-commit` (shebang + prism block), appends if hook exists, idempotent. `prism hook uninstall` strips prism block, removes file if empty. Verified all three cases.
 - **Phase 10**: `mcp_server.py` — FastMCP server with 3 tools: `get_context` (reads CLAUDE.md), `query_knowledge` (embeds question → sqlite-vec KNN → returns top-5 triples with cosine similarity), `crystallize` (spawns `prism crystallize` in background, returns immediately). `prism serve --project .` wires it. Verified all 3 tools via `mcp.call_tool`.
-
-### Not yet started
-- Phase 11: Graph UI ← next
+- **Phase 11**: `ui_server.py` — FastAPI + Pyvis at localhost:7823. Three routes: `/constitution` (CLAUDE.md in `<pre>` + Regenerate button via POST), `/memory` (searchable table of all 385 triples, active/stale badges, JS filter), `/graph` (Pyvis force-directed graph with nav injected, vis.js network). `prism ui --project . [--no-browser]` wires it. Verified: 200 on all routes, 385 total / 241 active shown, vis.js loaded in graph.

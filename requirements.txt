@@ -5,5 +5,6 @@ fastmcp>=2.0.0
 kg-gen>=0.3.0
 networkx>=3.4.0
 pyvis>=0.3.2
+sentence-transformers>=3.0.0
 sqlite-vec>=0.1.6
 uvicorn>=0.32.0

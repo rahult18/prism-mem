@@ -6,7 +6,20 @@ build-backend = "hatchling.build"
 name = "prism-mem"
 version = "0.1.0"
 description = "Post-session knowledge crystallizer for AI coding agents"
+readme = "README.md"
 requires-python = ">=3.13"
+license = { text = "MIT" }
+authors = [{ name = "Rahul Talatala", email = "rahul.talatala@gmail.com" }]
+keywords = ["ai", "knowledge-graph", "claude", "mcp", "coding-agent", "context"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "anthropic>=0.40.0",
     "click>=8.1.0",
@@ -15,9 +28,14 @@ dependencies = [
     "kg-gen>=0.3.0",
     "networkx>=3.4.0",
     "pyvis>=0.3.2",
+    "sentence-transformers>=3.0.0",
     "sqlite-vec>=0.1.6",
     "uvicorn>=0.32.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/rahultalatala/prism-mem"
+Repository = "https://github.com/rahultalatala/prism-mem"
 
 [project.scripts]
 prism = "prism_mem.cli:cli"

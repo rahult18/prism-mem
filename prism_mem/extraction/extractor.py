@@ -1,9 +1,8 @@
 from kg_gen import KGGen
 from kg_gen.models import Graph
 
-from prism_mem.config import ANTHROPIC_API_KEY, HAIKU_MODEL
+from prism_mem.config import get_api_key, get_model_string
 
-# kg-gen chunk size in characters — keeps each LLM call focused
 CHUNK_SIZE = 8000
 
 _kg = None
@@ -13,8 +12,8 @@ def _get_kg() -> KGGen:
     global _kg
     if _kg is None:
         _kg = KGGen(
-            model=f"anthropic/{HAIKU_MODEL}",
-            api_key=ANTHROPIC_API_KEY,
+            model=get_model_string(),
+            api_key=get_api_key(),
             temperature=0.0,
         )
     return _kg

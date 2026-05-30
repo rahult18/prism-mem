@@ -3,7 +3,7 @@ import time
 
 import click
 
-from prism_mem.config import ANTHROPIC_API_KEY
+from prism_mem.config import is_config_complete
 
 
 @click.group()
@@ -26,8 +26,10 @@ def crystallize(project, session):
     from prism_mem.storage.db import open_db
     from prism_mem.storage.models import Triple
 
-    if not ANTHROPIC_API_KEY:
-        click.echo("Error: ANTHROPIC_API_KEY is not set.", err=True)
+    if not is_config_complete():
+        click.echo("Error: prism is not configured. Run: prism config set provider <name>", err=True)
+        click.echo("       then: prism config set model <model-name>", err=True)
+        click.echo("       then: prism config set api-key <your-key>", err=True)
         sys.exit(1)
 
     t0 = time.time()
@@ -172,6 +174,62 @@ def hook_install(project):
     current = hook_file.stat().st_mode
     hook_file.chmod(current | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     click.echo(f"Installed prism post-commit hook at {hook_file}")
+
+
+@cli.group()
+def config():
+    """Manage prism configuration (provider, model, api-key)."""
+
+
+_VALID_KEYS = ("provider", "model", "api-key")
+_CURATED_PROVIDERS = [
+    "anthropic", "openai", "gemini", "ollama", "groq",
+    "mistral", "together_ai", "bedrock", "azure", "cohere",
+]
+
+
+@config.command("set")
+@click.argument("key", metavar="KEY", type=click.Choice(["provider", "model", "api-key"], case_sensitive=False))
+@click.argument("value")
+def config_set(key, value):
+    """Set a config value. KEY is one of: provider, model, api-key."""
+    from prism_mem.config import load_config, save_config, validate_provider
+
+    if key == "provider":
+        if not validate_provider(value):
+            click.echo(f"Error: '{value}' is not a recognized provider.", err=True)
+            click.echo(f"Common providers: {', '.join(_CURATED_PROVIDERS)}", err=True)
+            sys.exit(1)
+
+    cfg = load_config()
+    cfg_key = "api_key" if key == "api-key" else key
+    cfg[cfg_key] = value
+    save_config(cfg)
+    display = "***" if key == "api-key" else value
+    click.echo(f"Set {key} = {display}")
+
+
+@config.command("show")
+def config_show():
+    """Show current prism configuration."""
+    from prism_mem.config import load_config
+
+    cfg = load_config()
+    if not cfg:
+        click.echo("No configuration found. Run: prism config set provider <name>")
+        return
+
+    provider = cfg.get("provider", "(not set)")
+    model = cfg.get("model", "(not set)")
+    api_key = cfg.get("api_key", "")
+    if api_key:
+        masked = api_key[:8] + "***" if len(api_key) > 8 else "***"
+    else:
+        masked = "(not set)"
+
+    click.echo(f"provider = {provider}")
+    click.echo(f"model    = {model}")
+    click.echo(f"api-key  = {masked}")
 
 
 @hook.command("uninstall")

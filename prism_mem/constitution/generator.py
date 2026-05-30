@@ -1,20 +1,11 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-import anthropic
+import litellm
 
-from prism_mem.config import ANTHROPIC_API_KEY, HAIKU_MODEL, TOP_TRIPLES_FOR_CONSTITUTION
+from prism_mem.config import TOP_TRIPLES_FOR_CONSTITUTION, get_api_key, get_model_string
 from prism_mem.storage.db import get_all_triples, open_db
 from prism_mem.storage.models import Triple
-
-_client: anthropic.Anthropic | None = None
-
-
-def _get_client() -> anthropic.Anthropic:
-    global _client
-    if _client is None:
-        _client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    return _client
 
 
 def _score(triple: Triple, now: datetime) -> float:
@@ -37,12 +28,13 @@ def _format_triples(triples: list[Triple]) -> str:
 
 
 def _call_haiku(prompt: str) -> str:
-    msg = _get_client().messages.create(
-        model=HAIKU_MODEL,
+    response = litellm.completion(
+        model=get_model_string(),
+        api_key=get_api_key(),
         max_tokens=2048,
         messages=[{"role": "user", "content": prompt}],
     )
-    return msg.content[0].text
+    return response.choices[0].message.content
 
 
 def generate_claude_md(triples: list[Triple]) -> str:
@@ -103,15 +95,11 @@ Only include facts directly supported by the knowledge graph. Be concise."""
     return _call_haiku(prompt)
 
 
-def write_constitution(project_path: str, api_key: str | None = None) -> dict[str, Path]:
+def write_constitution(project_path: str) -> dict[str, Path]:
     """Generate and write CLAUDE.md, .cursorrules, and AGENTS.md to the project root.
 
     Returns dict of {filename: path} for files written.
     """
-    if api_key:
-        global _client
-        _client = anthropic.Anthropic(api_key=api_key)
-
     conn = open_db(project_path)
     all_triples = get_all_triples(conn)
     conn.close()
@@ -144,7 +132,6 @@ def write_constitution(project_path: str, api_key: str | None = None) -> dict[st
 if __name__ == "__main__":
     import sys
     project = sys.argv[1] if len(sys.argv) > 1 else "."
-    api_key = sys.argv[2] if len(sys.argv) > 2 else None
 
     print("Loading triples from DB...")
     conn = open_db(project)
@@ -156,8 +143,8 @@ if __name__ == "__main__":
     top = select_top_triples(triples)
     print(f"  Top {len(top)} selected for constitution\n")
 
-    print("Generating constitution files (calling Haiku)...")
-    written = write_constitution(project, api_key=api_key)
+    print("Generating constitution files (calling LLM)...")
+    written = write_constitution(project)
     for name, path in written.items():
         print(f"  Wrote {name} ({path.stat().st_size} bytes)")
 

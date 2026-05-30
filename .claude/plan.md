@@ -161,7 +161,7 @@ This is the payoff moment. If the generated constitution is good, everything is 
 
 ---
 
-## Phase 9 — Git Hook
+## Phase 9 — Git Hook ✅ DONE
 
 **Goal:** Prism runs automatically after every commit without the user thinking about it.
 

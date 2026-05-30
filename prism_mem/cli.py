@@ -122,15 +122,88 @@ def hook():
     """Manage the git post-commit hook."""
 
 
+_PRISM_MARKER_START = "# >>> prism-mem"
+_PRISM_MARKER_END = "# <<< prism-mem"
+_HOOK_SNIPPET = """\
+# >>> prism-mem
+prism crystallize --project "$(git rev-parse --show-toplevel)" &
+# <<< prism-mem"""
+
+
 @hook.command("install")
 @click.option("--project", default=".", show_default=True, help="Path to the project root.")
 def hook_install(project):
     """Install the post-commit hook in the given project."""
-    click.echo("not implemented yet")
+    import os
+    import stat
+    from pathlib import Path
+
+    project_path = Path(project).resolve()
+    git_dir = project_path / ".git"
+    if not git_dir.is_dir():
+        click.echo(f"Error: no .git directory found in {project_path}", err=True)
+        sys.exit(1)
+
+    hooks_dir = git_dir / "hooks"
+    hooks_dir.mkdir(exist_ok=True)
+    hook_file = hooks_dir / "post-commit"
+
+    if hook_file.exists():
+        content = hook_file.read_text()
+        if _PRISM_MARKER_START in content:
+            click.echo("prism hook already installed.")
+            return
+        # Append to existing hook
+        new_content = content.rstrip("\n") + "\n\n" + _HOOK_SNIPPET + "\n"
+        hook_file.write_text(new_content)
+    else:
+        hook_file.write_text("#!/bin/sh\n\n" + _HOOK_SNIPPET + "\n")
+
+    # Ensure executable
+    current = hook_file.stat().st_mode
+    hook_file.chmod(current | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    click.echo(f"Installed prism post-commit hook at {hook_file}")
 
 
 @hook.command("uninstall")
 @click.option("--project", default=".", show_default=True, help="Path to the project root.")
 def hook_uninstall(project):
     """Remove the post-commit hook from the given project."""
-    click.echo("not implemented yet")
+    from pathlib import Path
+
+    project_path = Path(project).resolve()
+    hook_file = project_path / ".git" / "hooks" / "post-commit"
+
+    if not hook_file.exists():
+        click.echo("No post-commit hook found.")
+        return
+
+    content = hook_file.read_text()
+    if _PRISM_MARKER_START not in content:
+        click.echo("prism hook not found in post-commit hook.")
+        return
+
+    # Strip prism block (start marker through end marker, inclusive)
+    lines = content.splitlines(keepends=True)
+    filtered = []
+    inside = False
+    for line in lines:
+        if line.strip() == _PRISM_MARKER_START:
+            inside = True
+            continue
+        if line.strip() == _PRISM_MARKER_END:
+            inside = False
+            continue
+        if not inside:
+            filtered.append(line)
+
+    remaining = "".join(filtered).rstrip("\n") + "\n"
+
+    # If only the shebang (or blank) remains, remove the file
+    non_empty = [l for l in remaining.splitlines() if l.strip() and not l.strip().startswith("#!")]
+    if not non_empty:
+        hook_file.unlink()
+        click.echo("Removed post-commit hook (file was only prism).")
+    else:
+        hook_file.write_text(remaining)
+        click.echo(f"Removed prism block from {hook_file}")

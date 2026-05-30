@@ -106,9 +106,11 @@ def crystallize(project, session):
 
 
 @cli.command()
-def serve():
-    """Start the MCP server (stdio mode)."""
-    click.echo("not implemented yet")
+@click.option("--project", default=".", show_default=True, help="Path to the project root.")
+def serve(project):
+    """Start the MCP server in stdio mode (for use with `claude mcp add`)."""
+    from prism_mem.server.mcp_server import start_mcp_server
+    start_mcp_server(project)
 
 
 @cli.command()

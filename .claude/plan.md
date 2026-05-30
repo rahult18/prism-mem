@@ -177,7 +177,7 @@ This is the payoff moment. If the generated constitution is good, everything is 
 
 ---
 
-## Phase 10 — MCP Server
+## Phase 10 — MCP Server ✅ DONE
 
 **Goal:** Any agent that supports MCP can call Prism's 3 tools.
 

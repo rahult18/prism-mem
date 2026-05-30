@@ -10,7 +10,7 @@ Quick reference for coding agents. Read this before touching any file.
 |---|---|---|
 | `prism_mem/__init__.py` | stub | just `__version__` |
 | `prism_mem/config.py` | done | paths, model names, constants |
-| `prism_mem/cli.py` | stub | all commands print "not implemented yet" |
+| `prism_mem/cli.py` | **done** | `crystallize` fully wired; `serve`, `ui`, `hook` still stub |
 | `prism_mem/ingestion/session_reader.py` | **done** | fully implemented, tested on real data |
 | `prism_mem/ingestion/git_reader.py` | **done** | `read_git_diff`, `read_git_log` |
 | `prism_mem/extraction/extractor.py` | **done** | `extract_triples(text, context) -> list[tuple]` |

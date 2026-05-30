@@ -144,7 +144,7 @@ This is the payoff moment. If the generated constitution is good, everything is 
 
 ---
 
-## Phase 8 — CLI (End-to-End Wire-Up)
+## Phase 8 — CLI (End-to-End Wire-Up) ✅ DONE
 
 **Goal:** `prism crystallize` runs the full pipeline from ingestion to constitution in one command.
 

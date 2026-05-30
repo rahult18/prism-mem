@@ -1,4 +1,9 @@
+import sys
+import time
+
 import click
+
+from prism_mem.config import ANTHROPIC_API_KEY
 
 
 @click.group()
@@ -11,7 +16,93 @@ def cli():
 @click.option("--session", default=None, help="Specific session ID to process (default: most recent).")
 def crystallize(project, session):
     """Read the last session + git history, extract triples, regenerate constitution files."""
-    click.echo("not implemented yet")
+    from datetime import datetime
+
+    from prism_mem.constitution.generator import write_constitution
+    from prism_mem.extraction.extractor import extract_triples
+    from prism_mem.ingestion.git_reader import read_git_diff, read_git_log
+    from prism_mem.ingestion.session_reader import read_latest_session, read_session_by_id
+    from prism_mem.linking.linker import ingest_triple
+    from prism_mem.storage.db import open_db
+    from prism_mem.storage.models import Triple
+
+    if not ANTHROPIC_API_KEY:
+        click.echo("Error: ANTHROPIC_API_KEY is not set.", err=True)
+        sys.exit(1)
+
+    t0 = time.time()
+
+    # 1. Read session
+    click.echo("Reading session...")
+    try:
+        if session:
+            chunks = read_session_by_id(project, session)
+        else:
+            chunks = read_latest_session(project)
+    except FileNotFoundError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+    session_id = chunks[0]["session_id"] if chunks else "unknown"
+    session_text = "\n\n".join(
+        f"[{c['role']}] {c['content']}"
+        for c in chunks
+        if c["content_type"] in ("text", "summary")
+    )
+    click.echo(f"  {len(chunks)} chunks from session {session_id[:8]}...")
+
+    # 2. Read git
+    click.echo("Reading git history...")
+    git_log = read_git_log(project)
+    git_diff = read_git_diff(project)
+    git_text = "\n\n".join(filter(None, [git_log, git_diff]))
+    if git_text:
+        click.echo(f"  {len(git_log.splitlines())} commits, {len(git_diff.splitlines())} diff lines")
+    else:
+        click.echo("  (no git history)")
+
+    # 3. Extract triples
+    combined = "\n\n---\n\n".join(filter(None, [session_text, git_text]))
+    click.echo(f"Extracting triples from {len(combined):,} chars (calling API)...")
+    try:
+        raw_triples = extract_triples(
+            combined,
+            context="Claude Code session and git history for a software project",
+        )
+    except Exception as e:
+        click.echo(f"Error during extraction: {e}", err=True)
+        sys.exit(1)
+    click.echo(f"  {len(raw_triples)} triples extracted")
+
+    # 4. Store + link
+    click.echo("Storing and linking triples...")
+    conn = open_db(project)
+    stored = 0
+    for subj, pred, obj in raw_triples:
+        t = Triple(
+            subject=subj,
+            predicate=pred,
+            object=obj,
+            session_id=session_id,
+            timestamp=datetime.utcnow(),
+        )
+        ingest_triple(conn, t)
+        stored += 1
+    conn.close()
+    click.echo(f"  {stored} triples stored")
+
+    # 5. Generate constitution
+    click.echo("Generating constitution files...")
+    try:
+        written = write_constitution(project)
+    except Exception as e:
+        click.echo(f"Error during constitution generation: {e}", err=True)
+        sys.exit(1)
+
+    elapsed = time.time() - t0
+    click.echo(f"\nDone in {elapsed:.1f}s:")
+    for name, path in written.items():
+        click.echo(f"  {path}  ({path.stat().st_size} bytes)")
 
 
 @cli.command()

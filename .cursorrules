@@ -1,0 +1,39 @@
+```
+# Cursor Rules for Prism-Mem Project
+
+## Project Purpose
+- Build a knowledge graph generation system that extracts and links structured triples from coding sessions
+- Store session transcripts and maintain persistent knowledge state across Claude interactions
+
+## Key Technology Stack
+- Use Claude/Haiku API via LiteLLM for triple extraction
+- Use SQLite with sqlite-vec extension for embeddings storage
+- Use transformer models for generating embeddings
+- Store sessions in ~/.claude/history.jsonl and ~/.claude/projects/*.jsonl files
+
+## Architecture Rules
+- Implement extraction in phases, with Phase 4 following Phase 3 and Phase 7 (constitution generator) at the end
+- Use session_reader.py to extract sessionId from transcripts
+- Use git_reader.py to implement read_git_diff for source analysis
+- Store all knowledge graphs in prism-mem located at Desktop/Projects
+
+## Key Components
+- extractor module calls Haiku API and produces Graph.relations
+- Use link_triple to call create_edge() when connecting entities
+- Apply similarity threshold during entity linking phase
+- Phase 7 scores all generated triples
+
+## Authentication & API
+- Authenticate Anthropic API with ANTHROPIC_API_KEY environment variable
+- Pass prompts to _call_haiku for model inference
+
+## Session Management
+- Subagent sessions maintain separate .jsonl files in ~/.claude directory
+- Subagents produce tool_result objects for parent agent consumption
+- Parse JSON objects with attachment field for file/context references
+
+## Code Conventions
+- Never hardcode API keys; use environment variables
+- Always validate Graph.relations output from kg-gen phases
+- Use role="user" for session differentiation where applicable
+```

@@ -1,35 +1,32 @@
 # AGENTS.md
 
-This project is a knowledge graph generation system (prism-mem) that extracts, processes, and stores coding session data with semantic embeddings.
+Prism-mem is a knowledge graph generation system that extracts relations from coding sessions and stores them in a structured database.
 
 ## Repository Layout
 
-- **config.py** - Defines paths and configuration for the project
-- **cli.py** - Implements the UI for user interaction
-- **session_reader.py** - Filters tool-results from session archives
-- **extractor.py** - Part of the kg-gen phase; extracts triples from sessions
-- **linker.py** - Implements `link_triple()` function to create graph edges
-- **db.py** - Uses SQLite and embeddings from `sentence-transformers/all-MiniLM-L6-v2`
-- **pyproject.toml** - Project configuration; depends on networkx
-- **requirements.txt** - Lists dependencies including fastapi
-- **.jsonl files** - Support append-only logging for session archives; contain `sessionId` field
-- **sessions_dir** - Computed from project_path; contains UUID folders with subagents subdirectories
-- **context.md** - Documents prism-mem
-- **CLAUDE.md** - Documents the extraction phase
+- `session_reader.py` - Extracts sessionId from session files
+- `git_reader.py` - Implements read_git_diff to extract code changes
+- `extractor.py` - Calls Haiku API via LiteLLM to extract Graph.relations
+- `mcp_server.py` - Server component for agent interaction
+- `Desktop/Projects/prism-mem/` - Project root location
+- `~/.claude/history.jsonl` - Stores session transcripts
+- `~/.claude/projects/` - Contains .jsonl files for session and subagent data
+- `Prism-mem` - Core knowledge graph storage system using SQLite with sqlite-vec extension
 
 ## Build & Run
 
-1. Install dependencies from `requirements.txt` and `pyproject.toml` (includes fastapi, networkx)
-2. Configure paths via `config.py`
-3. Run the CLI via `cli.py` to start the user interface
-4. The kg-gen phase processes coding sessions and generates `Graph.relations`
+1. Set `ANTHROPIC_API_KEY` environment variable to authenticate with Anthropic API
+2. Install dependencies including LiteLLM for Haiku model access and sqlite-vec extension
+3. Run extractor to process session files and generate Graph.relations
+4. Session data is automatically stored in `~/.claude/projects/` as .jsonl files
 
 ## Rules
 
-1. All session data must be read through `session_reader.py` to properly filter tool-results
-2. Similarity matching uses `sentence-transformers/all-MiniLM-L6-v2` embeddings with a threshold of 0.85; max L2 distance allowed is 0.5477
-3. Graph edges created via `linker.py` must have weight attributes
-4. Session archive data is stored in JSONL format with append-only logging; always include `sessionId` field
-5. The kg-gen phase is completed and generates `Graph.relations`; do not modify its status
-6. Triple linking must follow the chain: `ingest_triple()` → `link_triple()` → `create_edge()`
-7. All embeddings must come from the remote model `rahult18/prism-mem` or the configured transformer model in `db.py`
+1. Always authenticate API calls using ANTHROPIC_API_KEY before accessing the Anthropic API
+2. Use similarity threshold for linking operations when connecting triples
+3. Call Haiku via LiteLLM (not direct API) for all extraction tasks
+4. Store all extracted Graph.relations in the knowledge graph via the kg-gen phase
+5. Subagents must write their own .jsonl files in `~/.claude/projects/` with tool_result output
+6. Phase 7 (constitution generator) scores all triples before final storage
+7. Parse JSON objects and extract the attachment field when processing session data
+8. Each session extracts relations through the extractor which calls create_edge() via link_triple

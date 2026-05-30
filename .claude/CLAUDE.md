@@ -182,7 +182,7 @@ If a feature request does not directly serve "read session → extract triples �
 
 ## Current State
 
-**Phases complete: 1–7. Next: Phase 8 (CLI end-to-end wire-up).**
+**Phases complete: 1–8. Next: Phase 9 (git hook).**
 
 ### Done (summary)
 - **Phase 1**: Package skeleton, `pyproject.toml`, CLI stubs, `config.py`, `models.py`
@@ -191,10 +191,11 @@ If a feature request does not directly serve "read session → extract triples �
 - **Phase 4**: `extractor.py` — kg-gen + Haiku via LiteLLM, `extract_triples(text, context) -> list[tuple]`, `cluster=True`. Validated: 161 triples, good quality.
 - **Phase 5**: `db.py` — SQLite + sqlite-vec, `open_db`, `store_triple`, `get_all_triples`, `get_triple_by_id`, `mark_stale`. Embeddings via `sentence-transformers/all-MiniLM-L6-v2` (384-dim, local/free). DB at `~/.prism/projects/<hash>/graph.db`.
 - **Phase 6**: `linker.py` — `ingest_triple` (store → link → stale), `find_similar` (KNN via sqlite-vec, cosine sim from L2), `create_edge`, `check_and_mark_stale`. Order: link first while old triples are still non-stale, then mark stale.
-- **Phase 7**: `generator.py` — `write_constitution(project_path)`, `select_top_triples` (score = recency + confidence, top 30), `generate_claude_md/cursorrules/agents_md` via Haiku. Verified: generated accurate CLAUDE.md, .cursorrules, AGENTS.md from 244 real triples (132 non-stale).
+- **Phase 7**: `generator.py` — `write_constitution(project_path)`, `select_top_triples` (score = recency + confidence, top 30), `generate_claude_md/cursorrules/agents_md` via Haiku. Verified on real triples.
+- **Phase 8**: `cli.py` — `prism crystallize` wires all phases end-to-end. Progress output at each step, graceful errors, `--session` flag. Verified: 385 triples, 3 files written. Note: pipeline takes ~10min (kg-gen API calls are the bottleneck).
 
 ### Not yet started
-- Phase 8: CLI wire-up ← next
+- Phase 9: Git hook ← next
 - Phase 9: Git hook
 - Phase 10: MCP server
 - Phase 11: Graph UI

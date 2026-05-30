@@ -1,13 +1,51 @@
 import sqlite3
 
+import numpy as np
+
 from prism_mem.config import SIMILARITY_THRESHOLD
-from prism_mem.storage.db import embed, mark_stale, store_triple
+from prism_mem.storage.db import mark_stale, store_triple, vec_from_bytes
 from prism_mem.storage.models import Edge, Triple
 
-# With normalized embeddings, L2 distance relates to cosine similarity as:
-#   cosine_sim = 1 - (L2_dist² / 2)
-# So threshold 0.85 → max L2 distance ≈ 0.5477
-_MAX_L2 = (2 * (1 - SIMILARITY_THRESHOLD)) ** 0.5
+
+def search_similar(
+    conn: sqlite3.Connection,
+    query_bytes: bytes,
+    top_k: int = 5,
+    exclude_id: int | None = None,
+) -> list[tuple[int, float]]:
+    """Return [(triple_id, cosine_similarity), ...] for non-stale triples near query_bytes."""
+    if exclude_id is not None:
+        rows = conn.execute(
+            """
+            SELECT e.triple_id, e.embedding FROM embeddings e
+            JOIN triples t ON t.id = e.triple_id
+            WHERE t.stale = 0 AND e.triple_id != ?
+            """,
+            (exclude_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT e.triple_id, e.embedding FROM embeddings e
+            JOIN triples t ON t.id = e.triple_id
+            WHERE t.stale = 0
+            """,
+        ).fetchall()
+
+    if not rows:
+        return []
+
+    query_vec = vec_from_bytes(query_bytes)
+    ids = [r["triple_id"] for r in rows]
+    matrix = np.array([vec_from_bytes(r["embedding"]) for r in rows], dtype=np.float32)
+    sims = matrix @ query_vec
+
+    top_indices = np.argsort(sims)[::-1][:top_k]
+    results = []
+    for i in top_indices:
+        if float(sims[i]) >= SIMILARITY_THRESHOLD:
+            results.append((ids[i], float(sims[i])))
+    return results
 
 
 def find_similar(
@@ -16,32 +54,12 @@ def find_similar(
     top_k: int = 5,
 ) -> list[tuple[int, float]]:
     """Return [(other_id, cosine_similarity), ...] for non-stale triples near triple_id."""
-    emb_row = conn.execute(
-        "SELECT embedding FROM vec_triples WHERE rowid = ?", (triple_id,)
+    row = conn.execute(
+        "SELECT embedding FROM embeddings WHERE triple_id = ?", (triple_id,)
     ).fetchone()
-    if not emb_row:
+    if not row:
         return []
-
-    rows = conn.execute(
-        """
-        SELECT vt.rowid, vt.distance
-        FROM vec_triples vt
-        JOIN triples t ON t.id = vt.rowid
-        WHERE vt.embedding MATCH ?
-          AND vt.k = ?
-          AND vt.rowid != ?
-          AND t.stale = 0
-        ORDER BY vt.distance
-        """,
-        (emb_row["embedding"], top_k + 1, triple_id),
-    ).fetchall()
-
-    results = []
-    for row in rows:
-        cosine_sim = 1.0 - (row["distance"] ** 2) / 2.0
-        if cosine_sim >= SIMILARITY_THRESHOLD:
-            results.append((row["rowid"], cosine_sim))
-    return results
+    return search_similar(conn, row["embedding"], top_k=top_k, exclude_id=triple_id)
 
 
 def create_edge(

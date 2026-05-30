@@ -87,14 +87,13 @@ Each phase has a clear completion test. Do not move to the next phase until the 
 
 ## Phase 5 — Storage ✅ DONE
 
-**Goal:** Persist triples and their embeddings in a local SQLite database with vector search.
+**Goal:** Persist triples and their embeddings in a local SQLite database.
 
 **What to do:**
-- Install sqlite-vec
-- Define the `Triple` dataclass: id, subject, predicate, object, confidence, embedding, session_id, timestamp, stale
+- Define the `Triple` dataclass: id, subject, predicate, object, confidence, session_id, timestamp, stale
 - Define the `Edge` dataclass: from_id, to_id, edge_type, weight
 - Create `~/.prism/projects/<project-hash>/graph.db` on first use
-- Implement `store_triple()`: embed the triple text, store row + embedding in sqlite-vec
+- Implement `store_triple()`: embed the triple text, store row in `triples` + embedding blob in `embeddings`
 - Implement `get_all_triples()` and `get_triple_by_id()`
 
 **Done when:**
@@ -109,7 +108,8 @@ Each phase has a clear completion test. Do not move to the next phase until the 
 **Goal:** When a new triple is stored, find related existing triples and connect them. Detect stale facts.
 
 **What to do:**
-- Implement `find_similar(triple, top_k=5)`: query sqlite-vec for nearest neighbors by embedding
+- Implement `search_similar(conn, query_bytes, top_k, exclude_id)`: load all embeddings, numpy cosine similarity (matrix dot product on normalized vectors), return top-k above threshold
+- Implement `find_similar(conn, triple_id, top_k)`: thin wrapper over `search_similar` using the stored embedding for that triple
 - Implement `create_edge(from_id, to_id, edge_type, weight)`: write to edges table
 - Link triples where similarity > 0.85
 - Implement staleness: before storing a new triple, check if any existing triple has the same subject and predicate but a different object — if so, set `stale = True` on the old one
@@ -184,7 +184,7 @@ This is the payoff moment. If the generated constitution is good, everything is 
 **What to do:**
 - Implement FastMCP server in `server/mcp_server.py`
 - Tool 1: `get_context()` — returns the current CLAUDE.md content for the project
-- Tool 2: `query_knowledge(question: str)` — embeds the question, queries sqlite-vec, returns top-5 matching triples as structured text
+- Tool 2: `query_knowledge(question: str)` — embeds the question, runs `search_similar` (numpy cosine), returns top-5 matching triples as structured text
 - Tool 3: `crystallize(session_id: str = None)` — triggers the full pipeline, returns confirmation
 - Wire `prism serve` CLI command to start the FastMCP server in stdio mode
 
@@ -249,6 +249,19 @@ Work completed after all 11 phases. None of these change the DB schema or add ne
 - Removed dead `_CURATED_PROVIDERS` in `config.py`, `_VALID_KEYS` in `cli.py`
 - `ui_server.py` `/constitution/regenerate` now returns error page instead of silently swallowing exceptions
 - `mcp_server.py` `crystallize` tool checks `is_config_complete()` before spawning subprocess
+
+### numpy migration ✅ DONE
+- Removed `sqlite-vec` dependency (SQLite extension requiring `enable_load_extension`, disabled in many Python builds)
+- Added plain `embeddings` table to SQLite schema; `vec_from_bytes()` helper in `db.py`
+- `linker.py`: new `search_similar(conn, query_bytes, top_k, exclude_id)` using numpy matrix dot product; `find_similar` delegates to it; `mcp_server.query_knowledge` also uses it
+- `pyproject.toml`: removed `sqlite-vec`, added `numpy>=1.24.0`
+- Works on any Python build (pyenv, system Python, Docker, etc.)
+
+### Improved CLI logging ✅ DONE
+- `prism crystallize` shows per-step elapsed time after each phase
+- Expected chunk count displayed before the extraction API call so user knows what's coming
+- `click.progressbar` with live `N/total` counter during store/link loop
+- Constitution step shows file names as they're written
 
 ### UI enhancements ✅ DONE
 - `/memory`: added `Session` column after `Timestamp` — 8-char truncation with full ID in `title` attribute

@@ -4,7 +4,7 @@ import struct
 from datetime import datetime
 from pathlib import Path
 
-import sqlite_vec
+import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from prism_mem.config import PROJECTS_DIR
@@ -26,6 +26,10 @@ def embed(text: str) -> bytes:
     return struct.pack(f"{EMBEDDING_DIM}f", *vec)
 
 
+def vec_from_bytes(b: bytes) -> np.ndarray:
+    return np.array(struct.unpack(f"{EMBEDDING_DIM}f", b), dtype=np.float32)
+
+
 def project_hash(project_path: str) -> str:
     return hashlib.sha256(str(Path(project_path).resolve()).encode()).hexdigest()[:16]
 
@@ -38,16 +42,13 @@ def open_db(project_path: str) -> sqlite3.Connection:
     path = db_path(project_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
-    conn.enable_load_extension(True)
-    sqlite_vec.load(conn)
-    conn.enable_load_extension(False)
     conn.row_factory = sqlite3.Row
     _init_schema(conn)
     return conn
 
 
 def _init_schema(conn: sqlite3.Connection) -> None:
-    conn.executescript(f"""
+    conn.executescript("""
         CREATE TABLE IF NOT EXISTS triples (
             id        INTEGER PRIMARY KEY AUTOINCREMENT,
             subject   TEXT NOT NULL,
@@ -67,8 +68,10 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             PRIMARY KEY (from_id, to_id, edge_type)
         );
 
-        CREATE VIRTUAL TABLE IF NOT EXISTS vec_triples
-            USING vec0(embedding float[{EMBEDDING_DIM}]);
+        CREATE TABLE IF NOT EXISTS embeddings (
+            triple_id INTEGER PRIMARY KEY,
+            embedding BLOB NOT NULL
+        );
     """)
     conn.commit()
 
@@ -86,7 +89,7 @@ def store_triple(conn: sqlite3.Connection, triple: Triple) -> int:
     triple_id = cur.lastrowid
     embedding = embed(f"{triple.subject} {triple.predicate} {triple.object}")
     conn.execute(
-        "INSERT INTO vec_triples(rowid, embedding) VALUES (?, ?)",
+        "INSERT INTO embeddings(triple_id, embedding) VALUES (?, ?)",
         (triple_id, embedding),
     )
     conn.commit()
@@ -142,6 +145,6 @@ if __name__ == "__main__":
     print(f"\nTotal triples in DB: {len(all_t)}")
 
     # Verify embeddings
-    count = conn.execute("SELECT count(*) FROM vec_triples").fetchone()[0]
+    count = conn.execute("SELECT count(*) FROM embeddings").fetchone()[0]
     print(f"Embeddings stored: {count}")
     conn.close()

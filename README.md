@@ -54,8 +54,8 @@ The `provider` is validated against LiteLLM's provider list at set-time. Any pro
      ▼
 [3] STORE + LINK
     Embed triples (sentence-transformers, local)
-    Store in SQLite + sqlite-vec at ~/.prism/projects/<hash>/graph.db
-    Connect related triples by cosine similarity
+    Store in SQLite at ~/.prism/projects/<hash>/graph.db
+    Connect related triples by cosine similarity (numpy)
     Flag contradicted facts as stale
      │
      ▼
@@ -103,7 +103,7 @@ All data is local. Nothing leaves your machine except calls to your configured L
 ├── config.toml             ← provider, model, api-key
 └── projects/
     └── <project-hash>/
-        └── graph.db        ← SQLite + sqlite-vec, one file per project
+        └── graph.db        ← SQLite, one file per project
 ```
 
 ## Requirements

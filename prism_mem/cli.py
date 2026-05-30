@@ -1,3 +1,4 @@
+import math
 import sys
 import time
 
@@ -32,10 +33,13 @@ def crystallize(project, session):
         click.echo("       then: prism config set api-key <your-key>", err=True)
         sys.exit(1)
 
+    from prism_mem.extraction.extractor import CHUNK_SIZE
+
     t0 = time.time()
 
     # 1. Read session
     click.echo("Reading session...")
+    t_step = time.time()
     try:
         if session:
             chunks = read_session_by_id(project, session)
@@ -51,21 +55,25 @@ def crystallize(project, session):
         for c in chunks
         if c["content_type"] in ("text", "summary")
     )
-    click.echo(f"  {len(chunks)} chunks from session {session_id[:8]}...")
+    click.echo(f"  {len(chunks)} chunks from session {session_id[:8]}...  ({time.time() - t_step:.1f}s)")
 
     # 2. Read git
     click.echo("Reading git history...")
+    t_step = time.time()
     git_log = read_git_log(project)
     git_diff = read_git_diff(project)
     git_text = "\n\n".join(filter(None, [git_log, git_diff]))
     if git_text:
-        click.echo(f"  {len(git_log.splitlines())} commits, {len(git_diff.splitlines())} diff lines")
+        click.echo(f"  {len(git_log.splitlines())} commits, {len(git_diff.splitlines())} diff lines  ({time.time() - t_step:.1f}s)")
     else:
-        click.echo("  (no git history)")
+        click.echo(f"  (no git history)  ({time.time() - t_step:.1f}s)")
 
     # 3. Extract triples
     combined = "\n\n---\n\n".join(filter(None, [session_text, git_text]))
-    click.echo(f"Extracting triples from {len(combined):,} chars (calling API)...")
+    num_chunks = math.ceil(len(combined) / CHUNK_SIZE)
+    click.echo(f"Extracting triples from {len(combined):,} chars...")
+    click.echo(f"  ~{num_chunks} chunk(s) processing in parallel via API (may take several minutes)...")
+    t_step = time.time()
     try:
         raw_triples = extract_triples(
             combined,
@@ -74,32 +82,38 @@ def crystallize(project, session):
     except Exception as e:
         click.echo(f"Error during extraction: {e}", err=True)
         sys.exit(1)
-    click.echo(f"  {len(raw_triples)} triples extracted")
+    click.echo(f"  {len(raw_triples)} triples extracted  ({time.time() - t_step:.1f}s)")
 
     # 4. Store + link
-    click.echo("Storing and linking triples...")
+    click.echo(f"Storing and linking {len(raw_triples)} triples...")
+    t_step = time.time()
     conn = open_db(project)
-    stored = 0
-    for subj, pred, obj in raw_triples:
-        t = Triple(
-            subject=subj,
-            predicate=pred,
-            object=obj,
-            session_id=session_id,
-            timestamp=datetime.utcnow(),
-        )
-        ingest_triple(conn, t)
-        stored += 1
+    stored = edges_total = stale_total = 0
+    with click.progressbar(raw_triples, label="  linking", show_pos=True, width=50) as bar:
+        for subj, pred, obj in bar:
+            t = Triple(
+                subject=subj,
+                predicate=pred,
+                object=obj,
+                session_id=session_id,
+                timestamp=datetime.utcnow(),
+            )
+            _, stale_ids, edges = ingest_triple(conn, t)
+            stored += 1
+            edges_total += len(edges)
+            stale_total += len(stale_ids)
     conn.close()
-    click.echo(f"  {stored} triples stored")
+    click.echo(f"  {stored} stored, {edges_total} edges created, {stale_total} stale marked  ({time.time() - t_step:.1f}s)")
 
     # 5. Generate constitution
-    click.echo("Generating constitution files...")
+    click.echo("Generating constitution...")
+    t_step = time.time()
     try:
         written = write_constitution(project)
     except Exception as e:
         click.echo(f"Error during constitution generation: {e}", err=True)
         sys.exit(1)
+    click.echo(f"  CLAUDE.md, .cursorrules, AGENTS.md written  ({time.time() - t_step:.1f}s)")
 
     elapsed = time.time() - t0
     click.echo(f"\nDone in {elapsed:.1f}s:")

@@ -19,6 +19,7 @@ def get_context() -> str:
 @mcp.tool()
 def query_knowledge(question: str) -> str:
     """Semantic search over the project knowledge graph. Returns top-5 matching triples."""
+    from prism_mem.linking.linker import search_similar
     from prism_mem.storage.db import embed, open_db
 
     try:
@@ -27,38 +28,23 @@ def query_knowledge(question: str) -> str:
         return f"Could not open knowledge graph: {e}"
 
     query_emb = embed(question)
-    try:
-        rows = conn.execute(
-            """
-            SELECT vt.rowid, vt.distance
-            FROM vec_triples vt
-            JOIN triples t ON t.id = vt.rowid
-            WHERE vt.embedding MATCH ?
-              AND vt.k = 5
-              AND t.stale = 0
-            ORDER BY vt.distance
-            """,
-            (query_emb,),
-        ).fetchall()
-    except Exception:
-        conn.close()
-        return "Knowledge graph is empty. Run `prism crystallize` first."
+    results = search_similar(conn, query_emb, top_k=5)
 
-    if not rows:
+    if not results:
         conn.close()
-        return "No matching triples found."
+        return "No matching triples found. Knowledge graph may be empty — run `prism crystallize` first."
 
     lines = []
-    for row in rows:
+    for triple_id, cosine_sim in results:
         t = conn.execute(
             "SELECT subject, predicate, object FROM triples WHERE id = ?",
-            (row["rowid"],),
+            (triple_id,),
         ).fetchone()
-        cosine_sim = 1.0 - (row["distance"] ** 2) / 2.0
-        lines.append(f"[{cosine_sim:.2f}] ({t['subject']}) [{t['predicate']}] ({t['object']})")
+        if t:
+            lines.append(f"[{cosine_sim:.2f}] ({t['subject']}) [{t['predicate']}] ({t['object']})")
 
     conn.close()
-    return "\n".join(lines)
+    return "\n".join(lines) if lines else "No matching triples found."
 
 
 @mcp.tool()

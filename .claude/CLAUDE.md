@@ -28,9 +28,9 @@ Prism is a post-session knowledge crystallizer for AI coding agents. It reads Cl
     - kg-gen returns NetworkX graph of (subject, predicate, object) triples
         ↓
 [3] STORE + LINK
-    - Embed each triple via Anthropic embeddings API
-    - Store in SQLite (sqlite-vec) at ~/.prism/projects/<hash>/graph.db
-    - For each new triple: query sqlite-vec for nearest existing triples
+    - Embed each triple via sentence-transformers (local, 384-dim)
+    - Store in SQLite at ~/.prism/projects/<hash>/graph.db
+    - For each new triple: load all embeddings, compute cosine similarity with numpy
     - Create edges where similarity > threshold
     - Detect staleness: same subject+predicate, different object → flag old triple
         ↓
@@ -48,11 +48,12 @@ Prism is a post-session knowledge crystallizer for AI coding agents. It reads Cl
 ~/.prism/
 └── projects/
     └── <project-hash>/
-        └── graph.db         ← SQLite + sqlite-vec, one per project
+        └── graph.db         ← SQLite, one per project
 ```
 
-Two tables:
-- `triples`: id, subject, predicate, object, confidence, embedding (blob), session_id, timestamp, stale (bool)
+Three tables:
+- `triples`: id, subject, predicate, object, confidence, session_id, timestamp, stale (bool)
+- `embeddings`: triple_id, embedding (blob, 384-dim float32)
 - `edges`: from_id, to_id, edge_type, weight
 
 ### MCP Server — 3 tools only, no more
@@ -109,7 +110,7 @@ prism-mem/
 | Layer | Tool | Reason |
 |---|---|---|
 | Triple extraction | `kg-gen` | Already built, LLM + clustering, do not re-implement |
-| Vector storage | `sqlite-vec` | Local-first, no cloud, no ChromaDB |
+| Vector similarity | `numpy` | Pure Python, works on any Python build, sufficient for thousands of triples |
 | In-memory graph | `networkx` | Interops directly with kg-gen output |
 | Graph visualization | `pyvis` | Generates self-contained D3 HTML from NetworkX, no JS needed |
 | MCP server | `fastmcp` | uvx-friendly, decorator-based |
@@ -126,7 +127,7 @@ No Memorix dependency. No LangChain. No ChromaDB. No cloud services. Everything 
 
 **Local-first.** All data lives in `~/.prism/`. No network calls except to the Anthropic API. Users own their data.
 
-**sqlite-vec, not ChromaDB.** One file, no server, no Docker. sqlite-vec is a SQLite extension that adds vector similarity search. It is sufficient for this use case.
+**numpy for vector similarity, not sqlite-vec or ChromaDB.** sqlite-vec requires `enable_load_extension` which is disabled in many Python builds (pyenv, system Python on macOS/Linux). numpy works everywhere, and at prism's scale (thousands of triples) an O(n) cosine scan is ~50ms — fast enough that the index overhead of sqlite-vec is not worth the portability cost.
 
 **kg-gen for extraction.** Do not write a custom triple extractor. kg-gen handles chunking, LLM calls, and entity clustering. Trust it.
 
@@ -188,13 +189,15 @@ If a feature request does not directly serve "read session → extract triples �
 - **Phase 2**: `session_reader.py` — parses JSONL transcripts + subagents, chunk schema: `{role, content_type, content, timestamp, session_id, source}`
 - **Phase 3**: `git_reader.py` — `read_git_diff`, `read_git_log`, graceful on all edge cases
 - **Phase 4**: `extractor.py` — kg-gen + Haiku via LiteLLM, `extract_triples(text, context) -> list[tuple]`, `cluster=True`. Validated: 161 triples, good quality.
-- **Phase 5**: `db.py` — SQLite + sqlite-vec, `open_db`, `store_triple`, `get_all_triples`, `get_triple_by_id`, `mark_stale`. Embeddings via `sentence-transformers/all-MiniLM-L6-v2` (384-dim, local/free). DB at `~/.prism/projects/<hash>/graph.db`.
-- **Phase 6**: `linker.py` — `ingest_triple` (store → link → stale), `find_similar` (KNN via sqlite-vec, cosine sim from L2), `create_edge`, `check_and_mark_stale`. Order: link first while old triples are still non-stale, then mark stale.
+- **Phase 5**: `db.py` — SQLite with plain `embeddings` table, `open_db`, `store_triple`, `get_all_triples`, `get_triple_by_id`, `mark_stale`, `vec_from_bytes`. Embeddings via `sentence-transformers/all-MiniLM-L6-v2` (384-dim, local/free). DB at `~/.prism/projects/<hash>/graph.db`.
+- **Phase 6**: `linker.py` — `ingest_triple` (store → link → stale), `find_similar` and `search_similar` (numpy cosine similarity via matrix dot product on normalized vectors), `create_edge`, `check_and_mark_stale`. Order: link first while old triples are still non-stale, then mark stale.
 - **Phase 7**: `generator.py` — `write_constitution(project_path)`, `select_top_triples` (score = recency + confidence, top 30), `generate_claude_md/cursorrules/agents_md` via Haiku. Verified on real triples.
 - **Phase 8**: `cli.py` — `prism crystallize` wires all phases end-to-end. Progress output at each step, graceful errors, `--session` flag. Verified: 385 triples, 3 files written. Note: pipeline takes ~10min (kg-gen API calls are the bottleneck).
 - **Phase 9**: `cli.py` hook group — `prism hook install` writes `.git/hooks/post-commit` (shebang + prism block), appends if hook exists, idempotent. `prism hook uninstall` strips prism block, removes file if empty. Verified all three cases.
-- **Phase 10**: `mcp_server.py` — FastMCP server with 3 tools: `get_context` (reads CLAUDE.md), `query_knowledge` (embeds question → sqlite-vec KNN → returns top-5 triples with cosine similarity), `crystallize` (spawns `prism crystallize` in background, returns immediately). `prism serve --project .` wires it. Verified all 3 tools via `mcp.call_tool`.
+- **Phase 10**: `mcp_server.py` — FastMCP server with 3 tools: `get_context` (reads CLAUDE.md), `query_knowledge` (embeds question → numpy cosine search via `search_similar` → returns top-5 triples with cosine similarity), `crystallize` (spawns `prism crystallize` in background, returns immediately). `prism serve --project .` wires it. Verified all 3 tools via `mcp.call_tool`.
 - **Phase 11**: `ui_server.py` — FastAPI + Pyvis at localhost:7823. Three routes: `/constitution` (CLAUDE.md in `<pre>` + Regenerate button via POST), `/memory` (searchable table of all 385 triples, active/stale badges, JS filter), `/graph` (Pyvis force-directed graph with nav injected, vis.js network). `prism ui --project . [--no-browser]` wires it. Verified: 200 on all routes, 385 total / 241 active shown, vis.js loaded in graph.
 - **Multi-provider config**: `config.py` refactored — removed `ANTHROPIC_API_KEY`/`HAIKU_MODEL` constants, replaced with `load_config()`, `get_model_string()`, `get_api_key()`, `is_config_complete()`, `validate_provider()` reading from `~/.prism/config.toml`. `generator.py` migrated from `anthropic.Anthropic` to `litellm.completion()`. `extractor.py` uses config accessors. `cli.py` adds `prism config set/show` commands with provider validation; `crystallize` checks `is_config_complete()` with clear setup instructions. `pyproject.toml`: removed `anthropic` direct dep, added `litellm>=1.0.0`.
 - **Code review fixes**: removed unused imports (`timezone` in generator.py), dead variables (`_CURATED_PROVIDERS` in config.py, `_VALID_KEYS` in cli.py); `ui_server.py` regenerate endpoint now surfaces errors instead of silently swallowing; `mcp_server.py` crystallize tool checks `is_config_complete()` before spawning subprocess.
 - **UI enhancements**: `/memory` table gains `Session` column (8-char truncation, full ID on hover via `title`). `/graph` node click shows a fixed sidebar listing all contributing session IDs with active/stale badges — data embedded as JSON at page-load, injected vis.js `click` listener accesses Pyvis's `var network` global. `/constitution` adds a `Copy` button beside Regenerate — reads `pre.innerText` via `navigator.clipboard.writeText`, shows `Copied!` for 1.5s.
+- **numpy migration**: replaced `sqlite-vec` (SQLite extension requiring `enable_load_extension`) with plain `embeddings` table + numpy cosine similarity. Works on any Python build. `linker.py` exports `search_similar(conn, query_bytes, top_k, exclude_id)` used by both `find_similar` and `mcp_server.query_knowledge`. `pyproject.toml`: removed `sqlite-vec`, added `numpy>=1.24.0`.
+- **Improved CLI logging**: `prism crystallize` now shows per-step timing, expected chunk count before the extraction API call, `click.progressbar` with live triple counter during store/link, and per-file confirmation at constitution generation.

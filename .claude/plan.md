@@ -213,6 +213,11 @@ This is the payoff moment. If the generated constitution is good, everything is 
 - The force-directed graph is visible and interactive (draggable nodes, hoverable edges)
 - The constitution tab shows the current CLAUDE.md with a working Regenerate button
 
+**Enhancements added post-completion (see Post-Shipping section):**
+- `/memory`: Session column with hover for full ID
+- `/graph`: Node-click sidebar showing contributing sessions with active/stale status
+- `/constitution`: Copy button with clipboard feedback
+
 ---
 
 ## Shipping
@@ -223,6 +228,32 @@ This is the payoff moment. If the generated constitution is good, everything is 
 - `uv build` + `uv publish` to PyPI
 - Test `uvx prism-mem serve` from a fresh environment (no install needed)
 - Add to Claude Code: `claude mcp add prism -- uvx prism-mem serve`
+
+---
+
+## Post-Shipping Enhancements
+
+Work completed after all 11 phases. None of these change the DB schema or add new routes.
+
+### Multi-provider LLM config ✅ DONE
+- `~/.prism/config.toml` stores `provider`, `model`, `api_key` (flat TOML, built-in `tomllib`)
+- `config.py` exports `load_config`, `save_config`, `get_model_string` (`provider/model`), `get_api_key`, `is_config_complete`, `validate_provider` (uses `litellm.provider_list`)
+- `generator.py` switched from `anthropic.Anthropic` client to `litellm.completion()`; response via `response.choices[0].message.content`
+- `extractor.py` uses `get_model_string()` / `get_api_key()` — kg-gen/dspy.LM already speaks LiteLLM format
+- `cli.py` adds `prism config set {provider|model|api-key}` (provider validated at set-time) and `prism config show` (api-key masked)
+- `crystallize` now checks `is_config_complete()` with actionable error instead of crashing on missing env var
+- `pyproject.toml`: removed `anthropic` direct dep, added `litellm>=1.0.0`
+
+### Code review fixes ✅ DONE
+- Removed unused `timezone` import in `generator.py`
+- Removed dead `_CURATED_PROVIDERS` in `config.py`, `_VALID_KEYS` in `cli.py`
+- `ui_server.py` `/constitution/regenerate` now returns error page instead of silently swallowing exceptions
+- `mcp_server.py` `crystallize` tool checks `is_config_complete()` before spawning subprocess
+
+### UI enhancements ✅ DONE
+- `/memory`: added `Session` column after `Timestamp` — 8-char truncation with full ID in `title` attribute
+- `/graph`: node click opens a fixed sidebar listing contributing session IDs with active/stale badges. Node info built server-side from all triples (including stale), embedded as JSON, accessed via injected vis.js `network.on('click', ...)` listener. `</` escaped to `<\/` in embedded JSON.
+- `/constitution`: added `Copy` button beside Regenerate. Reads `pre.innerText` via `navigator.clipboard.writeText`, label swaps to `Copied!` for 1.5s then restores.
 
 ---
 

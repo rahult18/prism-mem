@@ -120,14 +120,11 @@ def serve(project):
 @click.option("--no-browser", is_flag=True, default=False, help="Don't open the browser automatically.")
 def ui(project, host, port, no_browser):
     """Start the graph UI at http://localhost:7823."""
-    import webbrowser
     from prism_mem.server.ui_server import start_ui_server
 
     url = f"http://{host}:{port}"
     click.echo(f"Starting Prism UI at {url}")
-    if not no_browser:
-        webbrowser.open(url)
-    start_ui_server(project, host=host, port=port)
+    start_ui_server(project, host=host, port=port, open_browser=not no_browser)
 
 
 @cli.group()
@@ -147,7 +144,6 @@ prism crystallize --project "$(git rev-parse --show-toplevel)" &
 @click.option("--project", default=".", show_default=True, help="Path to the project root.")
 def hook_install(project):
     """Install the post-commit hook in the given project."""
-    import os
     import stat
     from pathlib import Path
 

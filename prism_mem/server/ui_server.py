@@ -240,7 +240,20 @@ def _empty_page(tab: str, msg: str) -> str:
 
 # ── entry point ───────────────────────────────────────────────────────────────
 
-def start_ui_server(project_path: str = ".", host: str = UI_HOST, port: int = UI_PORT) -> None:
+def start_ui_server(
+    project_path: str = ".",
+    host: str = UI_HOST,
+    port: int = UI_PORT,
+    open_browser: bool = True,
+) -> None:
+    import webbrowser
+
     global _project_path
     _project_path = str(Path(project_path).resolve())
+
+    if open_browser:
+        @app.on_event("startup")
+        async def _open_browser():
+            webbrowser.open(f"http://{host}:{port}")
+
     uvicorn.run(app, host=host, port=port, log_level="error")

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
+from prism_mem.config import CLAUDE_PROJECTS_DIR
 
 
 def encode_project_path(project_path: str) -> str:

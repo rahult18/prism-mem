@@ -66,7 +66,7 @@ if __name__ == "__main__":
     combined = "\n\n---\n\n".join(filter(None, [session_text, git_text]))
     print(f"Input: {len(combined):,} chars across {len(chunks)} chunks\n", flush=True)
 
-    print("Extracting triples (this calls the Anthropic API)...\n", flush=True)
+    print("Extracting triples (this calls the LLM API)...\n", flush=True)
     triples = extract_triples(
         combined,
         context="Claude Code session transcript and git history for a Python project",

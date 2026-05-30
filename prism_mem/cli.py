@@ -181,7 +181,6 @@ def config():
     """Manage prism configuration (provider, model, api-key)."""
 
 
-_VALID_KEYS = ("provider", "model", "api-key")
 _CURATED_PROVIDERS = [
     "anthropic", "openai", "gemini", "ollama", "groq",
     "mistral", "together_ai", "bedrock", "azure", "cohere",

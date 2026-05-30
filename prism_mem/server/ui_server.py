@@ -221,10 +221,16 @@ def constitution():
 @app.post("/constitution/regenerate")
 def regenerate():
     from prism_mem.constitution.generator import write_constitution
+    from prism_mem.config import is_config_complete
+    if not is_config_complete():
+        return HTMLResponse(_empty_page("Constitution",
+            "LLM not configured. Run <code>prism config set provider/model/api-key</code> then restart."))
     try:
         write_constitution(_project_path)
-    except Exception:
-        pass
+    except ValueError as e:
+        return HTMLResponse(_empty_page("Constitution", f"Cannot regenerate: {_esc(str(e))}"))
+    except Exception as e:
+        return HTMLResponse(_empty_page("Constitution", f"Error during regeneration: {_esc(str(e))}"))
     return RedirectResponse("/constitution", status_code=303)
 
 

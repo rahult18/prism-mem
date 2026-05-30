@@ -13,11 +13,6 @@ TOP_TRIPLES_FOR_CONSTITUTION = 30
 UI_HOST = "127.0.0.1"
 UI_PORT = 7823
 
-_CURATED_PROVIDERS = [
-    "anthropic", "openai", "gemini", "ollama", "groq",
-    "mistral", "together_ai", "bedrock", "azure", "cohere",
-]
-
 
 def load_config() -> dict:
     if not _CONFIG_PATH.exists():

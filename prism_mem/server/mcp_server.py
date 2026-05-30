@@ -68,6 +68,9 @@ def crystallize(session_id: str = "") -> str:
     Extraction + constitution generation take several minutes (kg-gen API calls).
     Returns immediately; CLAUDE.md will be updated when done.
     """
+    from prism_mem.config import is_config_complete
+    if not is_config_complete():
+        return "Cannot crystallize: prism is not configured. Run `prism config set provider/model/api-key` first."
     cmd = ["prism", "crystallize", "--project", _project_path]
     if session_id:
         cmd += ["--session", session_id]

@@ -21,11 +21,11 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "anthropic>=0.40.0",
     "click>=8.1.0",
     "fastapi>=0.115.0",
     "fastmcp>=2.0.0",
     "kg-gen>=0.3.0",
+    "litellm>=1.0.0",
     "networkx>=3.4.0",
     "pyvis>=0.3.2",
     "sentence-transformers>=3.0.0",

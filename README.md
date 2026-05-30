@@ -9,6 +9,11 @@ Prism is a post-session knowledge crystallizer for AI coding agents. It reads Cl
 ```bash
 pip install prism-mem
 
+# Configure your LLM provider (one-time setup)
+prism config set provider anthropic
+prism config set model claude-haiku-4-5-20251001
+prism config set api-key <your-api-key>
+
 # Run once after a coding session to extract knowledge and regenerate context files
 prism crystallize --project /path/to/your/project
 
@@ -18,6 +23,20 @@ prism hook install --project /path/to/your/project
 # Add as an MCP server so agents can query the knowledge graph directly
 claude mcp add prism -- prism serve --project /path/to/your/project
 ```
+
+## Configuration
+
+Prism uses `~/.prism/config.toml` to store your LLM provider settings. Set it up with:
+
+```bash
+prism config set provider anthropic        # or: openai, gemini, ollama, groq, mistral, ...
+prism config set model claude-haiku-4-5-20251001
+prism config set api-key <your-api-key>
+
+prism config show                          # verify (api-key is masked)
+```
+
+The `provider` is validated against LiteLLM's provider list at set-time. Any provider LiteLLM supports works — Anthropic, OpenAI, Gemini, local Ollama models, etc. The model string is passed as `provider/model` to LiteLLM.
 
 ## How it works
 
@@ -42,13 +61,15 @@ claude mcp add prism -- prism serve --project /path/to/your/project
      ▼
 [4] GENERATE
     Score triples (recency + confidence)
-    Top 30 → Claude Haiku → write CLAUDE.md / .cursorrules / AGENTS.md
+    Top 30 → LLM (via LiteLLM) → write CLAUDE.md / .cursorrules / AGENTS.md
 ```
 
 ## Commands
 
 | Command | What it does |
 |---|---|
+| `prism config set <key> <value>` | Set provider, model, or api-key |
+| `prism config show` | Show current config (api-key masked) |
 | `prism crystallize --project .` | Full pipeline: ingest → extract → store → generate |
 | `prism hook install --project .` | Write `.git/hooks/post-commit` to run crystallize after every commit |
 | `prism hook uninstall --project .` | Remove the hook |
@@ -75,19 +96,20 @@ When added as an MCP server, Prism exposes three tools to any agent:
 
 ## Storage
 
-All data is local. Nothing leaves your machine except Anthropic API calls.
+All data is local. Nothing leaves your machine except calls to your configured LLM provider.
 
 ```
 ~/.prism/
+├── config.toml             ← provider, model, api-key
 └── projects/
     └── <project-hash>/
-        └── graph.db    ← SQLite + sqlite-vec, one file per project
+        └── graph.db        ← SQLite + sqlite-vec, one file per project
 ```
 
 ## Requirements
 
 - Python 3.13+
-- `ANTHROPIC_API_KEY` environment variable
+- Any LiteLLM-compatible LLM provider (configured via `prism config set`)
 
 ## License
 

@@ -75,7 +75,7 @@ prism-mem/
 ├── requirements.txt           ← Dev dependencies (for venv)
 ├── prism_mem/
 │   ├── __init__.py
-│   ├── cli.py                 ← Click CLI: prism serve / ui / crystallize / hook
+│   ├── cli.py                 ← Click CLI: prism serve / ui / crystallize / hook / config
 │   ├── ingestion/
 │   │   ├── __init__.py
 │   │   ├── session_reader.py  ← Read ~/.claude/projects/ JSONL files
@@ -97,12 +97,10 @@ prism-mem/
 │   │   ├── __init__.py
 │   │   ├── mcp_server.py      ← FastMCP server with 3 tools
 │   │   └── ui_server.py       ← FastAPI + Pyvis UI at localhost:7823
-│   └── config.py              ← Paths, constants, env vars (ANTHROPIC_API_KEY etc.)
+│   └── config.py              ← Paths, constants, TOML config (load_config, get_model_string, get_api_key, is_config_complete, validate_provider)
 └── tests/
     └── ...
 ```
-
-**Note on the current ingestion/session_reader.py:** This file is outside the `prism_mem/` package. Move it to `prism_mem/ingestion/session_reader.py` when setting up the package structure.
 
 ---
 
@@ -117,7 +115,8 @@ prism-mem/
 | MCP server | `fastmcp` | uvx-friendly, decorator-based |
 | Web UI | `fastapi` + `uvicorn` | Serves pyvis HTML + constitution at localhost:7823 |
 | CLI | `click` | Standard, clean |
-| LLM calls | `anthropic` SDK | Haiku for extraction + constitution generation |
+| LLM calls | `litellm` | Multi-provider abstraction — Anthropic, OpenAI, Gemini, Ollama, etc. |
+| Config | `~/.prism/config.toml` + built-in `tomllib` | Flat TOML, no external TOML dep, provider validated at set-time |
 
 No Memorix dependency. No LangChain. No ChromaDB. No cloud services. Everything runs locally.
 
@@ -133,7 +132,7 @@ No Memorix dependency. No LangChain. No ChromaDB. No cloud services. Everything 
 
 **3 MCP tools only.** `get_context`, `query_knowledge`, `crystallize`. Do not add tools. Scope is the whole point.
 
-**Haiku for all LLM calls.** Fast and cheap. Claude Sonnet is not needed for extraction or constitution generation at this scale.
+**LiteLLM for all LLM calls.** Multi-provider via a single abstraction layer. Config stored in `~/.prism/config.toml` (provider + model + api_key). Default is Anthropic Haiku — fast and cheap. Provider validated at `prism config set` time using `litellm.provider_list`. extractor.py passes `provider/model` string to kg-gen (already dspy.LM / LiteLLM-compatible). generator.py uses `litellm.completion()` directly with OpenAI-compatible response format.
 
 **No Memorix dependency.** Prism is completely independent. Different database, different MCP server, different storage path. They are complementary but not coupled.
 
@@ -178,11 +177,11 @@ If a feature request does not directly serve "read session → extract triples �
 
 - Python 3.13
 - Virtual env at `.venv/`
-- Requires `ANTHROPIC_API_KEY` in environment
+- LLM provider configured via `prism config set provider/model/api-key` (stored in `~/.prism/config.toml`)
 
 ## Current State
 
-**Phases complete: 1–11. All phases done. Next: Shipping.**
+**Phases complete: 1–11 + multi-provider config. All phases done. Next: Shipping.**
 
 ### Done (summary)
 - **Phase 1**: Package skeleton, `pyproject.toml`, CLI stubs, `config.py`, `models.py`
@@ -196,3 +195,4 @@ If a feature request does not directly serve "read session → extract triples �
 - **Phase 9**: `cli.py` hook group — `prism hook install` writes `.git/hooks/post-commit` (shebang + prism block), appends if hook exists, idempotent. `prism hook uninstall` strips prism block, removes file if empty. Verified all three cases.
 - **Phase 10**: `mcp_server.py` — FastMCP server with 3 tools: `get_context` (reads CLAUDE.md), `query_knowledge` (embeds question → sqlite-vec KNN → returns top-5 triples with cosine similarity), `crystallize` (spawns `prism crystallize` in background, returns immediately). `prism serve --project .` wires it. Verified all 3 tools via `mcp.call_tool`.
 - **Phase 11**: `ui_server.py` — FastAPI + Pyvis at localhost:7823. Three routes: `/constitution` (CLAUDE.md in `<pre>` + Regenerate button via POST), `/memory` (searchable table of all 385 triples, active/stale badges, JS filter), `/graph` (Pyvis force-directed graph with nav injected, vis.js network). `prism ui --project . [--no-browser]` wires it. Verified: 200 on all routes, 385 total / 241 active shown, vis.js loaded in graph.
+- **Multi-provider config**: `config.py` refactored — removed `ANTHROPIC_API_KEY`/`HAIKU_MODEL` constants, replaced with `load_config()`, `get_model_string()`, `get_api_key()`, `is_config_complete()`, `validate_provider()` reading from `~/.prism/config.toml`. `generator.py` migrated from `anthropic.Anthropic` to `litellm.completion()`. `extractor.py` uses config accessors. `cli.py` adds `prism config set/show` commands with provider validation; `crystallize` checks `is_config_complete()` with clear setup instructions.

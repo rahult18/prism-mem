@@ -46,6 +46,7 @@ def root():
 
 @app.get("/graph", response_class=HTMLResponse)
 def graph():
+    import json
     import networkx as nx
     from pyvis.network import Network
 
@@ -53,24 +54,38 @@ def graph():
 
     try:
         conn = open_db(_project_path)
-        triples = [t for t in get_all_triples(conn) if not t.stale]
+        all_triples = get_all_triples(conn)
         conn.close()
     except Exception as e:
         return HTMLResponse(_empty_page("Graph", f"Could not load graph: {e}"))
 
-    if not triples:
+    active_triples = [t for t in all_triples if not t.stale]
+    if not active_triples:
         return HTMLResponse(_empty_page("Graph", "No triples yet. Run <code>prism crystallize</code> first."))
+
+    # Build per-node session contribution map (all triples, including stale)
+    node_sessions: dict[str, list[dict]] = {}
+    seen_keys: dict[str, set] = {}
+    for t in all_triples:
+        for label in [t.subject, t.object]:
+            if label not in node_sessions:
+                node_sessions[label] = []
+                seen_keys[label] = set()
+            key = (t.session_id, not t.stale)
+            if key not in seen_keys[label]:
+                seen_keys[label].add(key)
+                node_sessions[label].append({"id": (t.session_id or "")[:8], "active": not t.stale})
 
     G = nx.DiGraph()
     seen_edges: dict[tuple, list[str]] = {}
-    for t in triples:
+    for t in active_triples:
         G.add_node(t.subject)
         G.add_node(t.object)
         key = (t.subject, t.object)
         seen_edges.setdefault(key, []).append(t.predicate)
 
     for (src, dst), preds in seen_edges.items():
-        label = " / ".join(dict.fromkeys(preds))  # deduplicate preserving order
+        label = " / ".join(dict.fromkeys(preds))
         G.add_edge(src, dst, label=label, title=label)
 
     net = Network(
@@ -108,6 +123,35 @@ def graph():
     pyvis_html = net.generate_html()
     nav_html = _nav("Graph")
     pyvis_html = pyvis_html.replace("<body>", f"<body style='margin:0;padding:0;'>{nav_html}", 1)
+
+    node_info_js = json.dumps(node_sessions, ensure_ascii=False).replace("</", "<\\/")
+    inject = f"""
+<div id="node-sidebar" style="position:fixed;top:46px;right:0;width:260px;height:calc(100vh - 46px);background:#1a1a2e;border-left:1px solid #2a2a4a;padding:16px;overflow-y:auto;display:none;font-family:sans-serif;font-size:12px;color:#ccc;z-index:100;box-sizing:border-box;"></div>
+<script>
+(function() {{
+  var nodeInfo = {node_info_js};
+  var sb = document.getElementById('node-sidebar');
+  function showSidebar(nodeId) {{
+    var info = nodeInfo[nodeId] || [];
+    var html = '<div style="color:#e94560;font-weight:bold;margin-bottom:12px;word-break:break-all;">' + nodeId + '</div>';
+    html += '<div style="color:#555;font-size:11px;margin-bottom:10px;">Sessions (' + info.length + ')</div>';
+    for (var i = 0; i < info.length; i++) {{
+      var s = info[i];
+      var badge = s.active ? '<span style="color:#4caf50;">active</span>' : '<span style="color:#e94560;opacity:0.7;">stale</span>';
+      html += '<div style="margin:5px 0;display:flex;gap:8px;align-items:center;"><code style="color:#7ec8e3;flex:1;">' + s.id + '</code>' + badge + '</div>';
+    }}
+    html += '<div style="margin-top:16px;"><button class="close-btn" style="background:none;border:none;color:#555;font-size:11px;cursor:pointer;">&#x2715; close</button></div>';
+    sb.innerHTML = html;
+    sb.style.display = 'block';
+    sb.querySelector('.close-btn').addEventListener('click', function() {{ sb.style.display = 'none'; }});
+  }}
+  network.on('click', function(params) {{
+    if (!params.nodes.length) {{ sb.style.display = 'none'; return; }}
+    showSidebar(String(params.nodes[0]));
+  }});
+}})();
+</script>"""
+    pyvis_html = pyvis_html.replace("</body>", inject + "\n</body>", 1)
     return HTMLResponse(content=pyvis_html)
 
 
@@ -132,6 +176,8 @@ def memory():
             if t.stale
             else '<span style="color:#4caf50;font-size:11px;">active</span>'
         )
+        sid_short = _esc((t.session_id or "")[:8])
+        sid_full = _esc(t.session_id or "")
         rows += (
             f'<tr style="{fade}{strike}">'
             f"<td>{t.id}</td>"
@@ -140,6 +186,7 @@ def memory():
             f"<td>{_esc(t.object)}</td>"
             f"<td>{t.confidence:.2f}</td>"
             f"<td>{ts}</td>"
+            f'<td title="{sid_full}" style="font-family:monospace;font-size:11px;color:#666;">{sid_short}</td>'
             f"<td>{badge}</td>"
             f"</tr>"
         )
@@ -170,7 +217,7 @@ def memory():
 <table id="t">
   <thead><tr>
     <th>#</th><th>Subject</th><th>Predicate</th><th>Object</th>
-    <th>Conf</th><th>Timestamp</th><th>Status</th>
+    <th>Conf</th><th>Timestamp</th><th>Session</th><th>Status</th>
   </tr></thead>
   <tbody>{rows}</tbody>
 </table>
@@ -210,11 +257,24 @@ def constitution():
 <body>
 {_nav("Constitution")}
 <div class="wrap">
-  <form method="post" action="/constitution/regenerate">
-    <button class="btn" type="submit">&#9654;&nbsp; Regenerate</button>
-  </form>
+  <div style="display:flex;gap:8px;margin-bottom:18px;">
+    <form method="post" action="/constitution/regenerate" style="margin:0;">
+      <button class="btn" style="margin-bottom:0;" type="submit">&#9654;&nbsp; Regenerate</button>
+    </form>
+    <button class="btn" style="margin-bottom:0;" type="button" id="copy-btn" onclick="copyConstitution()">Copy</button>
+  </div>
   <pre>{raw}</pre>
 </div>
+<script>
+function copyConstitution() {{
+  navigator.clipboard.writeText(document.querySelector('pre').innerText).then(function() {{
+    var btn = document.getElementById('copy-btn');
+    var orig = btn.innerHTML;
+    btn.textContent = 'Copied!';
+    setTimeout(function() {{ btn.innerHTML = orig; }}, 1500);
+  }});
+}}
+</script>
 </body></html>""")
 
 

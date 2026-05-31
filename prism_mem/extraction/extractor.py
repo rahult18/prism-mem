@@ -33,12 +33,23 @@ def extract_triples(text: str, context: str = "") -> list[tuple[str, str, str]]:
         return []
 
     kg = _get_kg()
-    graph: Graph = kg.generate(
-        input_data=text,
-        context=context,
-        chunk_size=CHUNK_SIZE,
-        cluster=True,
-    )
+    try:
+        graph: Graph = kg.generate(
+            input_data=text,
+            context=context,
+            chunk_size=CHUNK_SIZE,
+            cluster=True,
+        )
+    except Exception:
+        # Clustering occasionally fails when the LLM returns a non-string value
+        # during entity normalization. Fall back to unclustered extraction — triples
+        # are still valid; prism's cosine similarity linking handles deduplication.
+        graph = kg.generate(
+            input_data=text,
+            context=context,
+            chunk_size=CHUNK_SIZE,
+            cluster=False,
+        )
     return list(graph.relations)
 
 

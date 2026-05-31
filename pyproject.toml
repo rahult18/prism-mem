@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "prism-mem"
-version = "0.1.0"
+version = "0.1.5"
 description = "Post-session knowledge crystallizer for AI coding agents"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -29,6 +29,7 @@ dependencies = [
     "networkx>=3.4.0",
     "numpy>=1.24.0",
     "pyvis>=0.3.2",
+    "rich>=13.0.0",
     "sentence-transformers>=3.0.0",
     "uvicorn>=0.32.0",
 ]

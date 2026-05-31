@@ -184,7 +184,7 @@ This is the payoff moment. If the generated constitution is good, everything is 
 **What to do:**
 - Implement FastMCP server in `server/mcp_server.py`
 - Tool 1: `get_context()` — returns the current CLAUDE.md content for the project
-- Tool 2: `query_knowledge(question: str)` — embeds the question, runs `search_similar` (numpy cosine), returns top-5 matching triples as structured text
+- Tool 2: `query_knowledge(question: str)` — embeds question, runs `search_similar` from `linker.py` (numpy cosine), returns top-5 matching triples as structured text
 - Tool 3: `crystallize(session_id: str = None)` — triggers the full pipeline, returns confirmation
 - Wire `prism serve` CLI command to start the FastMCP server in stdio mode
 
@@ -262,6 +262,31 @@ Work completed after all 11 phases. None of these change the DB schema or add ne
 - Expected chunk count displayed before the extraction API call so user knows what's coming
 - `click.progressbar` with live `N/total` counter during store/link loop
 - Constitution step shows file names as they're written
+
+### Rich CLI overhaul ✅ DONE
+- Replaced flat `click.echo` output with `rich`-powered 5-phase display
+- Each phase: spinner via `console.status(...)` while running → permanent `✔ N/5 PhaseName  detail  Xs` line when done
+- Phase 4 (Store+Link): `rich.progress.Progress` with `BarColumn` + `MofNCompleteColumn`, `transient=True` so bar disappears and is replaced by the ✔ line
+- Noise suppressed: `logging.getLogger("LiteLLM/huggingface_hub/sentence_transformers").setLevel(ERROR)`, `HF_HUB_DISABLE_PROGRESS_BARS=1`, `HF_HUB_DISABLE_IMPLICIT_TOKEN=1`, `warnings.filterwarnings(ignore, unauthenticated)`
+- Embedding model pre-warmed via `_get_model()` before phase display so any load output appears cleanly before UI
+- `pyproject.toml`: added `rich>=13.0.0`
+
+### Incremental extraction caching ✅ DONE
+- Watermark approach: track last-processed session timestamp + processed git commit hashes in DB
+- `session_watermarks (session_key TEXT PK, last_timestamp TEXT)` — one row per JSONL file stem
+- `processed_commits (commit_hash TEXT PK, processed_at TEXT)` — one row per HEAD commit
+- `db.py`: `get_session_watermark`, `set_session_watermark`, `is_commit_processed`, `mark_commit_processed`
+- `git_reader.py`: `read_git_head()` via `git rev-parse HEAD`
+- `cli.py`: session chunks filtered to `timestamp > last_ts`; git diff skipped if commit already processed; combined text built from new-only content; if empty → exit early with "Nothing new since last run"
+- Phase 1 display shows `(N new, M cached)` when a watermark exists
+- Watermarks advanced only after successful store+link (atomic with triple storage)
+- DB opened once at run start, closed after watermarks updated
+
+### Clustering fallback ✅ DONE
+- `extractor.py`: `kg.generate(cluster=True)` wrapped in try/except
+- On exception (typically Pydantic `literal_error` when LLM returns integer instead of entity string), retries with `cluster=False`
+- Triples are still fully extracted; only cross-chunk entity normalization is skipped
+- Downstream cosine similarity linking in Phase 4 handles entity deduplication regardless
 
 ### UI enhancements ✅ DONE
 - `/memory`: added `Session` column after `Timestamp` — 8-char truncation with full ID in `title` attribute

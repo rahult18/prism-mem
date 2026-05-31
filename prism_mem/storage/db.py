@@ -72,6 +72,16 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             triple_id INTEGER PRIMARY KEY,
             embedding BLOB NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS session_watermarks (
+            session_key  TEXT PRIMARY KEY,
+            last_timestamp TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS processed_commits (
+            commit_hash  TEXT PRIMARY KEY,
+            processed_at TEXT NOT NULL
+        );
     """)
     conn.commit()
 
@@ -108,6 +118,35 @@ def get_triple_by_id(conn: sqlite3.Connection, triple_id: int) -> Triple | None:
 
 def mark_stale(conn: sqlite3.Connection, triple_id: int) -> None:
     conn.execute("UPDATE triples SET stale = 1 WHERE id = ?", (triple_id,))
+    conn.commit()
+
+
+def get_session_watermark(conn: sqlite3.Connection, session_key: str) -> str | None:
+    row = conn.execute(
+        "SELECT last_timestamp FROM session_watermarks WHERE session_key = ?", (session_key,)
+    ).fetchone()
+    return row["last_timestamp"] if row else None
+
+
+def set_session_watermark(conn: sqlite3.Connection, session_key: str, timestamp: str) -> None:
+    conn.execute(
+        "INSERT OR REPLACE INTO session_watermarks (session_key, last_timestamp) VALUES (?, ?)",
+        (session_key, timestamp),
+    )
+    conn.commit()
+
+
+def is_commit_processed(conn: sqlite3.Connection, commit_hash: str) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM processed_commits WHERE commit_hash = ?", (commit_hash,)
+    ).fetchone() is not None
+
+
+def mark_commit_processed(conn: sqlite3.Connection, commit_hash: str) -> None:
+    conn.execute(
+        "INSERT OR IGNORE INTO processed_commits (commit_hash, processed_at) VALUES (?, ?)",
+        (commit_hash, datetime.utcnow().isoformat()),
+    )
     conn.commit()
 
 

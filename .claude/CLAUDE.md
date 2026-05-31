@@ -51,10 +51,12 @@ Prism is a post-session knowledge crystallizer for AI coding agents. It reads Cl
         └── graph.db         ← SQLite, one per project
 ```
 
-Three tables:
+Five tables:
 - `triples`: id, subject, predicate, object, confidence, session_id, timestamp, stale (bool)
 - `embeddings`: triple_id, embedding (blob, 384-dim float32)
 - `edges`: from_id, to_id, edge_type, weight
+- `session_watermarks`: session_key (JSONL file stem), last_timestamp — incremental caching
+- `processed_commits`: commit_hash, processed_at — skip already-seen git diffs
 
 ### MCP Server — 3 tools only, no more
 
@@ -187,9 +189,9 @@ If a feature request does not directly serve "read session → extract triples �
 ### Done (summary)
 - **Phase 1**: Package skeleton, `pyproject.toml`, CLI stubs, `config.py`, `models.py`
 - **Phase 2**: `session_reader.py` — parses JSONL transcripts + subagents, chunk schema: `{role, content_type, content, timestamp, session_id, source}`
-- **Phase 3**: `git_reader.py` — `read_git_diff`, `read_git_log`, graceful on all edge cases
-- **Phase 4**: `extractor.py` — kg-gen + Haiku via LiteLLM, `extract_triples(text, context) -> list[tuple]`, `cluster=True`. Validated: 161 triples, good quality.
-- **Phase 5**: `db.py` — SQLite with plain `embeddings` table, `open_db`, `store_triple`, `get_all_triples`, `get_triple_by_id`, `mark_stale`, `vec_from_bytes`. Embeddings via `sentence-transformers/all-MiniLM-L6-v2` (384-dim, local/free). DB at `~/.prism/projects/<hash>/graph.db`.
+- **Phase 3**: `git_reader.py` — `read_git_diff`, `read_git_log`, `read_git_head` (returns HEAD commit hash), graceful on all edge cases
+- **Phase 4**: `extractor.py` — kg-gen + Haiku via LiteLLM, `extract_triples(text, context) -> list[tuple]`, `cluster=True` with automatic fallback to `cluster=False` if clustering raises a Pydantic validation error (LLM returns non-string entity). Validated: 161 triples, good quality.
+- **Phase 5**: `db.py` — SQLite with `embeddings`, `session_watermarks`, `processed_commits` tables. `open_db`, `store_triple`, `get_all_triples`, `get_triple_by_id`, `mark_stale`, `vec_from_bytes`, `get_session_watermark`, `set_session_watermark`, `is_commit_processed`, `mark_commit_processed`. Embeddings via `sentence-transformers/all-MiniLM-L6-v2` (384-dim, local/free). DB at `~/.prism/projects/<hash>/graph.db`.
 - **Phase 6**: `linker.py` — `ingest_triple` (store → link → stale), `find_similar` and `search_similar` (numpy cosine similarity via matrix dot product on normalized vectors), `create_edge`, `check_and_mark_stale`. Order: link first while old triples are still non-stale, then mark stale.
 - **Phase 7**: `generator.py` — `write_constitution(project_path)`, `select_top_triples` (score = recency + confidence, top 30), `generate_claude_md/cursorrules/agents_md` via Haiku. Verified on real triples.
 - **Phase 8**: `cli.py` — `prism crystallize` wires all phases end-to-end. Progress output at each step, graceful errors, `--session` flag. Verified: 385 triples, 3 files written. Note: pipeline takes ~10min (kg-gen API calls are the bottleneck).
@@ -200,4 +202,6 @@ If a feature request does not directly serve "read session → extract triples �
 - **Code review fixes**: removed unused imports (`timezone` in generator.py), dead variables (`_CURATED_PROVIDERS` in config.py, `_VALID_KEYS` in cli.py); `ui_server.py` regenerate endpoint now surfaces errors instead of silently swallowing; `mcp_server.py` crystallize tool checks `is_config_complete()` before spawning subprocess.
 - **UI enhancements**: `/memory` table gains `Session` column (8-char truncation, full ID on hover via `title`). `/graph` node click shows a fixed sidebar listing all contributing session IDs with active/stale badges — data embedded as JSON at page-load, injected vis.js `click` listener accesses Pyvis's `var network` global. `/constitution` adds a `Copy` button beside Regenerate — reads `pre.innerText` via `navigator.clipboard.writeText`, shows `Copied!` for 1.5s.
 - **numpy migration**: replaced `sqlite-vec` (SQLite extension requiring `enable_load_extension`) with plain `embeddings` table + numpy cosine similarity. Works on any Python build. `linker.py` exports `search_similar(conn, query_bytes, top_k, exclude_id)` used by both `find_similar` and `mcp_server.query_knowledge`. `pyproject.toml`: removed `sqlite-vec`, added `numpy>=1.24.0`.
-- **Improved CLI logging**: `prism crystallize` now shows per-step timing, expected chunk count before the extraction API call, `click.progressbar` with live triple counter during store/link, and per-file confirmation at constitution generation.
+- **Rich CLI overhaul**: `prism crystallize` replaced flat text output with `rich`-powered 5-phase numbered display. Each phase shows a spinner (via `console.status`) while running, then a permanent ✔ line with timing. Phase 4 uses `rich.progress.Progress` with a live `N/total` bar (`transient=True`). LiteLLM, HuggingFace Hub, and sentence-transformers noise suppressed via logging levels + `HF_HUB_DISABLE_PROGRESS_BARS` + `HF_HUB_DISABLE_IMPLICIT_TOKEN` env vars. Embedding model pre-warmed before phase display starts. `pyproject.toml`: added `rich>=13.0.0`.
+- **Incremental extraction caching**: watermark-based caching avoids re-processing already-seen content. `session_watermarks` table stores `(session_key, last_timestamp)` per session JSONL file; only chunks with `timestamp > last_timestamp` are extracted. `processed_commits` table stores HEAD commit hashes; git diff is skipped if the current commit was already processed. Watermarks advanced only after successful store+link. DB opened once for the full run. `git_reader.py`: added `read_git_head()`.
+- **Clustering fallback**: `extractor.py` wraps `kg.generate(cluster=True)` in try/except; on any exception (typically Pydantic validation error when LLM returns a non-string entity name), retries with `cluster=False`. Triples are still extracted; cosine similarity linking handles entity deduplication downstream.

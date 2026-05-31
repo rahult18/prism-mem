@@ -1,4 +1,3 @@
-import math
 import sys
 import time
 
@@ -17,14 +16,36 @@ def cli():
 @click.option("--session", default=None, help="Specific session ID to process (default: most recent).")
 def crystallize(project, session):
     """Read the last session + git history, extract triples, regenerate constitution files."""
+    import logging
+    import math
+    import os
+    import warnings
     from datetime import datetime
+    from pathlib import Path
+
+    # Suppress noisy third-party output before any imports that trigger it
+    logging.getLogger("LiteLLM").setLevel(logging.ERROR)
+    logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+    logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+    warnings.filterwarnings("ignore", message=".*unauthenticated.*")
+    os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+    os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
+
+    from rich.console import Console
+    from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn
 
     from prism_mem.constitution.generator import write_constitution
-    from prism_mem.extraction.extractor import extract_triples
-    from prism_mem.ingestion.git_reader import read_git_diff, read_git_log
-    from prism_mem.ingestion.session_reader import read_latest_session, read_session_by_id
+    from prism_mem.extraction.extractor import CHUNK_SIZE, extract_triples
+    from prism_mem.ingestion.git_reader import read_git_diff, read_git_head, read_git_log
+    from prism_mem.ingestion.session_reader import (
+        find_project_sessions, list_sessions, parse_session,
+    )
     from prism_mem.linking.linker import ingest_triple
-    from prism_mem.storage.db import open_db
+    from prism_mem.storage.db import (
+        _get_model, open_db,
+        get_session_watermark, set_session_watermark,
+        is_commit_processed, mark_commit_processed,
+    )
     from prism_mem.storage.models import Triple
 
     if not is_config_complete():
@@ -33,64 +54,121 @@ def crystallize(project, session):
         click.echo("       then: prism config set api-key <your-key>", err=True)
         sys.exit(1)
 
-    from prism_mem.extraction.extractor import CHUNK_SIZE
+    # Pre-warm the embedding model so any load output appears before the phase UI
+    _get_model()
+
+    console = Console(highlight=False)
+    project_name = Path(project).resolve().name
+    console.print(f"\n[bold]Prism[/bold] [dim]—[/dim] [cyan]{project_name}[/cyan]\n")
 
     t0 = time.time()
 
-    # 1. Read session
-    click.echo("Reading session...")
-    t_step = time.time()
-    try:
-        if session:
-            chunks = read_session_by_id(project, session)
-        else:
-            chunks = read_latest_session(project)
-    except FileNotFoundError as e:
-        click.echo(f"Error: {e}", err=True)
+    def _done(n, label, detail, elapsed):
+        console.print(f"  [green]✔[/green]  [bold]{n}/5  {label:<12}[/bold] {detail}  [dim]{elapsed:.1f}s[/dim]")
+
+    def _err(msg):
+        console.print(f"  [red]✖[/red]  {msg}")
         sys.exit(1)
+
+    # Open DB once for the whole run so watermark reads and writes are atomic
+    conn = open_db(project)
+
+    # ── Phase 1: Session ─────────────────────────────────────────────────────
+    t_step = time.time()
+    with console.status("  [dim]1/5  Session[/dim]  reading...", spinner="dots"):
+        try:
+            if session:
+                sessions_dir = find_project_sessions(project)
+                session_file = sessions_dir / f"{session}.jsonl"
+                if not session_file.exists():
+                    _err(f"session {session!r} not found")
+                session_key = session
+            else:
+                session_files = list_sessions(project)
+                if not session_files:
+                    _err("no session files found")
+                session_file = session_files[0]
+                session_key = session_file.stem
+            chunks = parse_session(session_file)
+        except FileNotFoundError as e:
+            conn.close()
+            _err(str(e))
+
+    # Filter to only chunks newer than the watermark for this session
+    last_ts = get_session_watermark(conn, session_key)
+    new_chunks = [
+        c for c in chunks
+        if not last_ts or not c["timestamp"] or c["timestamp"] > last_ts
+    ]
+    cached_count = len(chunks) - len(new_chunks)
 
     session_id = chunks[0]["session_id"] if chunks else "unknown"
-    session_text = "\n\n".join(
+    new_session_text = "\n\n".join(
         f"[{c['role']}] {c['content']}"
-        for c in chunks
+        for c in new_chunks
         if c["content_type"] in ("text", "summary")
     )
-    click.echo(f"  {len(chunks)} chunks from session {session_id[:8]}...  ({time.time() - t_step:.1f}s)")
 
-    # 2. Read git
-    click.echo("Reading git history...")
+    session_detail = f"{len(chunks)} chunks · {session_id[:8]}"
+    if cached_count:
+        session_detail += f"  ({len(new_chunks)} new, {cached_count} cached)"
+    _done(1, "Session", session_detail, time.time() - t_step)
+
+    # ── Phase 2: Git ──────────────────────────────────────────────────────────
     t_step = time.time()
-    git_log = read_git_log(project)
-    git_diff = read_git_diff(project)
-    git_text = "\n\n".join(filter(None, [git_log, git_diff]))
-    if git_text:
-        click.echo(f"  {len(git_log.splitlines())} commits, {len(git_diff.splitlines())} diff lines  ({time.time() - t_step:.1f}s)")
+    with console.status("  [dim]2/5  Git[/dim]  reading history...", spinner="dots"):
+        git_log = read_git_log(project)
+        git_diff = read_git_diff(project)
+        head_commit = read_git_head(project)
+
+    git_already_processed = bool(head_commit and is_commit_processed(conn, head_commit))
+    new_git_text = "" if git_already_processed else "\n\n".join(filter(None, [git_log, git_diff]))
+
+    if git_already_processed:
+        git_detail = f"{len(git_log.splitlines())} commits · already processed, skipped"
+    elif new_git_text:
+        git_detail = f"{len(git_log.splitlines())} commits · {len(git_diff.splitlines())} diff lines"
     else:
-        click.echo(f"  (no git history)  ({time.time() - t_step:.1f}s)")
+        git_detail = "no git history"
+    _done(2, "Git", git_detail, time.time() - t_step)
 
-    # 3. Extract triples
-    combined = "\n\n---\n\n".join(filter(None, [session_text, git_text]))
+    # ── Phase 3: Extract ──────────────────────────────────────────────────────
+    combined = "\n\n---\n\n".join(filter(None, [new_session_text, new_git_text]))
+
+    if not combined.strip():
+        _done(3, "Extract", "skipped · all content already processed", 0.0)
+        conn.close()
+        console.print("\n  [dim]Nothing new since last run.[/dim]")
+        return
+
     num_chunks = math.ceil(len(combined) / CHUNK_SIZE)
-    click.echo(f"Extracting triples from {len(combined):,} chars...")
-    click.echo(f"  ~{num_chunks} chunk(s) processing in parallel via API (may take several minutes)...")
     t_step = time.time()
-    try:
-        raw_triples = extract_triples(
-            combined,
-            context="Claude Code session and git history for a software project",
-        )
-    except Exception as e:
-        click.echo(f"Error during extraction: {e}", err=True)
-        sys.exit(1)
-    click.echo(f"  {len(raw_triples)} triples extracted  ({time.time() - t_step:.1f}s)")
+    with console.status(
+        f"  [dim]3/5  Extract[/dim]  ~{num_chunks} chunk(s) · calling API...",
+        spinner="dots",
+    ):
+        try:
+            raw_triples = extract_triples(
+                combined,
+                context="Claude Code session and git history for a software project",
+            )
+        except Exception as e:
+            conn.close()
+            _err(f"extraction failed: {e}")
+    _done(3, "Extract", f"{len(raw_triples)} triples extracted", time.time() - t_step)
 
-    # 4. Store + link
-    click.echo(f"Storing and linking {len(raw_triples)} triples...")
+    # ── Phase 4: Store + Link ─────────────────────────────────────────────────
     t_step = time.time()
-    conn = open_db(project)
     stored = edges_total = stale_total = 0
-    with click.progressbar(raw_triples, label="  linking", show_pos=True, width=50) as bar:
-        for subj, pred, obj in bar:
+    with Progress(
+        TextColumn("  [bold]4/5  Store+Link[/bold]"),
+        BarColumn(bar_width=40),
+        MofNCompleteColumn(),
+        console=console,
+        transient=True,
+    ) as progress:
+        task = progress.add_task("", total=len(raw_triples))
+        for subj, pred, obj in raw_triples:
             t = Triple(
                 subject=subj,
                 predicate=pred,
@@ -102,23 +180,36 @@ def crystallize(project, session):
             stored += 1
             edges_total += len(edges)
             stale_total += len(stale_ids)
+            progress.advance(task)
+
+    # Advance watermarks now that triples are safely stored
+    if new_chunks:
+        valid_ts = [c["timestamp"] for c in new_chunks if c["timestamp"]]
+        if valid_ts:
+            set_session_watermark(conn, session_key, max(valid_ts))
+    if head_commit and not git_already_processed:
+        mark_commit_processed(conn, head_commit)
+
     conn.close()
-    click.echo(f"  {stored} stored, {edges_total} edges created, {stale_total} stale marked  ({time.time() - t_step:.1f}s)")
+    _done(4, "Store+Link", f"{stored} stored · {edges_total} edges · {stale_total} stale", time.time() - t_step)
 
-    # 5. Generate constitution
-    click.echo("Generating constitution...")
+    # ── Phase 5: Generate ─────────────────────────────────────────────────────
     t_step = time.time()
-    try:
-        written = write_constitution(project)
-    except Exception as e:
-        click.echo(f"Error during constitution generation: {e}", err=True)
-        sys.exit(1)
-    click.echo(f"  CLAUDE.md, .cursorrules, AGENTS.md written  ({time.time() - t_step:.1f}s)")
+    with console.status("  [dim]5/5  Generate[/dim]  writing constitution files...", spinner="dots"):
+        try:
+            written = write_constitution(project)
+        except Exception as e:
+            _err(f"constitution generation failed: {e}")
+    _done(5, "Generate", "CLAUDE.md · .cursorrules · AGENTS.md", time.time() - t_step)
 
+    # ── Summary ───────────────────────────────────────────────────────────────
     elapsed = time.time() - t0
-    click.echo(f"\nDone in {elapsed:.1f}s:")
-    for name, path in written.items():
-        click.echo(f"  {path}  ({path.stat().st_size} bytes)")
+    mins, secs = divmod(int(elapsed), 60)
+    elapsed_str = f"{mins}m {secs}s" if mins else f"{secs}s"
+    console.print(f"\n  [bold]Done in {elapsed_str}[/bold]")
+    for path in written.values():
+        size = path.stat().st_size
+        console.print(f"  [dim]→[/dim] {path}  [dim]{size:,} B[/dim]")
 
 
 @cli.command()

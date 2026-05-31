@@ -27,9 +27,11 @@ def crystallize(project, session):
     logging.getLogger("LiteLLM").setLevel(logging.ERROR)
     logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
     logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+    logging.getLogger("kg_gen").setLevel(logging.CRITICAL)
     warnings.filterwarnings("ignore", message=".*unauthenticated.*")
     os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
     os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
+    os.environ["HF_HUB_VERBOSITY"] = "error"
 
     from rich.console import Console
     from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn
